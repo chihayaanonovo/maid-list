@@ -22,6 +22,8 @@
   （[Issue #1](https://github.com/chihayaanonovo/maid-list/issues/1)）。
   报告里准确给出了异常堆栈与 Mixin 来源，让这个「专用服务器上打开女仆界面即崩溃」
   的严重问题得以在 0.1.1 中被彻底修复。
+  
+### 其他更新↓↓↓
 
 ### 状态判定
 
