@@ -1,0 +1,50 @@
+modLoader="javafml"
+loaderVersion="${loader_version_range}"
+license="${mod_license}"
+
+[[mods]]
+modId="${mod_id}"
+version="${mod_version}"
+displayName="女仆名单 (Maid List)"
+authors="FairyMooN3"
+description='''
+车万女仆（Touhou Little Maid）的附属模组。
+
+提供一件「女仆名单」工具：右键打开 QQ 联系人列表风格的女仆名册，
+一行一位女仆，可查看状态 / 工作模式 / 好感 / 模型 / 坐标，并支持：
+
+- 打开女仆背包、狐梦陪伴手册（装了狐梦伴岁时可选联动）
+- 把女仆召唤到身边 / 前往女仆身边 / 一键全体召唤（均带冷却与音效）
+- 鼠标中键拖动排序，顺序自动保存
+
+依赖：Touhou Little Maid 1.5.x
+可选联动：狐梦伴岁（foxdream），未安装时相关按钮自动隐藏
+
+内置字体：站酷快乐体（SIL Open Font License 1.1），
+许可证见 jar 内 LICENSE-ZCOOL-KuaiLe-OFL.txt。
+本模组本体以 MIT 许可证发布，见 LICENSE-MIT.txt。
+'''
+
+[[mixins]]
+config="${mod_id}.mixins.json"
+
+[[dependencies.${mod_id}]]
+    modId="neoforge"
+    type="required"
+    versionRange="${neo_version_range}"
+    ordering="NONE"
+    side="BOTH"
+
+[[dependencies.${mod_id}]]
+    modId="minecraft"
+    type="required"
+    versionRange="${minecraft_version_range}"
+    ordering="NONE"
+    side="BOTH"
+
+[[dependencies.${mod_id}]]
+    modId="touhou_little_maid"
+    type="required"
+    versionRange="[1.5.0,)"
+    ordering="AFTER"
+    side="BOTH"

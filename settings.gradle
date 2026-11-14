@@ -1,0 +1,13 @@
+pluginManagement {
+    repositories {
+        // Mirror of maven.neoforged.net (the official host is unreachable from here)
+        maven {
+            name = 'BMCLAPI-NeoForge'
+            url = 'https://bmclapi2.bangbang93.com/maven/'
+        }
+        gradlePluginPortal()
+    }
+}
+
+// 项目名（避免使用 ':'，Gradle 会把它当项目路径分隔符）
+rootProject.name = '车万女仆附属·女仆名单'

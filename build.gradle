@@ -1,0 +1,103 @@
+buildscript {
+    // 直接依赖插件实现，绕开 Gradle Plugin Marker（本机对 marker 解析不稳定）
+    repositories {
+        maven { url = 'https://plugins.gradle.org/m2' }
+        maven { url = 'https://bmclapi2.bangbang93.com/maven/' }
+        mavenCentral()
+    }
+    dependencies {
+        classpath 'net.neoforged:moddev-gradle:2.0.148'
+    }
+}
+
+plugins {
+    id 'java-library'
+}
+
+apply plugin: 'net.neoforged.moddev'
+
+version = mod_version
+group = mod_group_id
+
+base {
+    // 产物文件名与 mod id 解耦：jar 叫 maid_list-<version>.jar，
+    // 注册 id 是 fairymoon3_maid_list（存档里物品 id 的命名空间就是它）
+    archivesName = archive_name
+}
+
+java.toolchain.languageVersion = JavaLanguageVersion.of(21)
+
+repositories {
+    // Mirror of maven.neoforged.net; the official host is unreachable from this machine
+    maven {
+        name = 'BMCLAPI-NeoForge'
+        url = 'https://bmclapi2.bangbang93.com/maven/'
+    }
+    mavenCentral()
+}
+
+neoForge {
+    version = project.neo_version
+
+    runs {
+        client {
+            client()
+        }
+        server {
+            server()
+            programArgument '--nogui'
+        }
+    }
+
+    mods {
+        fairymoon3_maid_list {
+            sourceSet sourceSets.main
+        }
+    }
+}
+
+dependencies {
+    // Touhou Little Maid API surface: compile only, the real jar ships with the modpack
+    compileOnly files("libs/${tlm_jar}")
+
+    // 可选联动（软依赖）：只在编译期需要，运行期由 ModList 守卫
+    compileOnly files("libs/${foxdream_jar}")
+}
+
+tasks.withType(ProcessResources).configureEach {
+    filteringCharset = 'UTF-8'
+    var replaceProperties = [
+            minecraft_version      : minecraft_version,
+            minecraft_version_range: minecraft_version_range,
+            neo_version            : neo_version,
+            neo_version_range      : '[21.1.0,)',
+            loader_version_range   : loader_version_range,
+            mod_id                 : mod_id,
+            mod_name               : mod_name,
+            mod_license            : mod_license,
+            mod_version            : mod_version,
+    ]
+    inputs.properties replaceProperties
+
+    filesMatching(['META-INF/neoforge.mods.toml']) {
+        expand replaceProperties
+    }
+}
+
+tasks.withType(JavaCompile).configureEach {
+    options.encoding = 'UTF-8'
+}
+
+tasks.named('jar', Jar) {
+    manifest {
+        // 清单属性一律用 ASCII，避免不同编码下出现乱码
+        attributes([
+                'Specification-Title'   : archive_name,
+                'Specification-Vendor'  : mod_group_id,
+                'Specification-Version' : '1',
+                'Implementation-Title'  : archive_name,
+                'Implementation-Version': project.version,
+                'Implementation-Vendor' : mod_group_id
+        ])
+    }
+}
