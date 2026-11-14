@@ -5,6 +5,11 @@
 车万女仆（Touhou Little Maid）的附属模组。给你一件工具，右键打开一份 **QQ 联系人列表风格** 的女仆名册，
 一行一位女仆，集中查看状态并直接操作。
 
+Bilibili首发 发布地址：
+
+https://www.bilibili.com/video/BV1xuWC6bEiw/?vd_source=d3deb14eadb422019a4acf2ecd56700a
+
+
 ---
 
 ## 环境要求
