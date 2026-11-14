@@ -38,7 +38,7 @@ public class CareNetworkActionRangeMixin {
             ),
             remap = false)
     private static double maidList$ignoreActionDistance(ServerPlayer player, Entity entity) {
-        if (!PanelConfig.REMOTE_MAID_CONTAINER.get()) {
+        if (!PanelConfig.remoteMaidContainer()) {
             return player.distanceToSqr(entity);
         }
         if (LOGGED.compareAndSet(false, true)) {
@@ -55,7 +55,7 @@ public class CareNetworkActionRangeMixin {
             ),
             remap = false)
     private static boolean maidList$ignoreActionLineOfSight(ServerPlayer player, Entity entity) {
-        if (!PanelConfig.IGNORE_FOXDREAM_LINE_OF_SIGHT.get()) {
+        if (!PanelConfig.ignoreFoxdreamLineOfSight()) {
             return player.hasLineOfSight(entity);
         }
         return true;

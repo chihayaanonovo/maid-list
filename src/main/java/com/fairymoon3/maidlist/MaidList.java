@@ -28,6 +28,9 @@ public class MaidList {
         ModItems.register(modEventBus);
         modEventBus.addListener(ModNetwork::register);
         modContainer.registerConfig(ModConfig.Type.CLIENT, PanelConfig.CLIENT_SPEC);
+        // 服务端配置：专用服务器读不到 CLIENT 配置，必须单独注册一份，
+        // 否则服主无法关闭「远程管理」这个会改变玩法的功能（0.1 的崩溃也源于此）。
+        modContainer.registerConfig(ModConfig.Type.SERVER, PanelConfig.SERVER_SPEC);
         LOGGER.info("[女仆名单] 已加载，女仆名册准备就绪。");
     }
 }

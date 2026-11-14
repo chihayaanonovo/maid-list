@@ -34,7 +34,7 @@ public class MaidContainerDistanceMixin {
             ),
             remap = false)
     private boolean maidList$remoteMaidContainer(Player player, Entity entity, double maxDistance) {
-        if (!PanelConfig.REMOTE_MAID_CONTAINER.get()) {
+        if (!PanelConfig.remoteMaidContainer()) {
             // 配置关掉 → 保持车万女仆原行为
             return player.canInteractWithEntity(entity, maxDistance);
         }

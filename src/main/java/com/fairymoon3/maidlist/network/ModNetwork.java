@@ -32,6 +32,8 @@ public final class ModNetwork {
                 ModNetwork::handleTeleportTo);
         registrar.playToServer(MaidSummonAllPayload.TYPE, MaidSummonAllPayload.STREAM_CODEC,
                 ModNetwork::handleSummonAll);
+        registrar.playToServer(MaidSitTogglePayload.TYPE, MaidSitTogglePayload.STREAM_CODEC,
+                ModNetwork::handleSitToggle);
 
         // 服务端 -> 客户端
         registrar.playToClient(MaidListPayload.TYPE, MaidListPayload.STREAM_CODEC,
@@ -88,6 +90,15 @@ public final class ModNetwork {
         context.enqueueWork(() -> {
             if (context.player() instanceof ServerPlayer serverPlayer) {
                 com.fairymoon3.maidlist.server.MaidSummoner.summonAll(serverPlayer);
+            }
+        });
+    }
+
+    /** 服务端：切换女仆坐下 / 站立。 */
+    private static void handleSitToggle(MaidSitTogglePayload payload, IPayloadContext context) {
+        context.enqueueWork(() -> {
+            if (context.player() instanceof ServerPlayer serverPlayer) {
+                MaidCollector.toggleSitting(serverPlayer, payload.maidId());
             }
         });
     }

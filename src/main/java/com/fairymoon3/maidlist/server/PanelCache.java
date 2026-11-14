@@ -141,7 +141,8 @@ public class PanelCache extends SavedData {
                         t.getInt("cz"),
                         t.contains("foxStage") ? t.getInt("foxStage") : FoxdreamCompat.STAGE_NONE,
                         t.getLong("acq"),
-                        0
+                        0,
+                        null
                 );
                 cache.entries.put(id, entry);
                 cache.recordedAt.put(id, t.getLong("at"));

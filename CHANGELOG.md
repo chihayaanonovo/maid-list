@@ -1,5 +1,45 @@
 # 更新日志
 
+## v0.1.1
+
+### 重要修复：专用服务器崩溃
+
+- **症状**：专用服务器（Dedicated Server）在有玩家打开女仆界面时崩溃，
+  异常 `IllegalStateException: Cannot get config value before config is loaded`，
+  堆栈指向 `MaidContainerDistanceMixin` → `PanelConfig.REMOTE_MAID_CONTAINER.get()`
+- **根因**：本模组配置是 `CLIENT` 类型，**专用服务器不会加载它**；
+  而四个 Mixin（容器距离、开界面包、狐梦动作包、早点睡觉）是双端生效的，
+  服务端一读配置就抛异常
+- **修复**：
+  - 所有配置读取改为 `PanelConfig` 的安全访问器，读不到时返回默认值，绝不抛异常
+  - 新增 `SERVER` 类型配置（`config/fairymoon3_maid_list-server.toml`），
+    让服主可以真正关闭「远程管理」与「忽略视线」
+  - 读取优先级：客户端配置 → 服务端配置 → 内置默认值
+
+### 致谢
+
+- 感谢 **[@REDSTONE440](https://github.com/REDSTONE440)** 提交了这份详细的专用服务器崩溃报告
+  （[Issue #1](https://github.com/chihayaanonovo/maid-list/issues/1)）。
+  报告里准确给出了异常堆栈与 Mixin 来源，让这个「专用服务器上打开女仆界面即崩溃」
+  的严重问题得以在 0.1.1 中被彻底修复。
+
+### 状态判定
+
+- 优先级改为 **睡觉 > 坐下（待机中） > 战斗 > 驻守 > 自由**
+- 修正「战斗中的女仆被右键坐下后仍显示战斗中」的问题
+- 坐下但身上仍挂着攻击目标时，显示「待机中（吸引怪物仇恨中）」
+
+### 新增
+
+- 展开详情里新增 **坐下 / 起身** 按钮，远程切换女仆姿态（等同右键让她坐下），带 1 秒冷却
+- 标题栏新增 **白天 / 夜间主题切换**（太阳 / 月亮图标），白天为米白配色，夜间为 v0.1 的深色配色，
+  选择会写入 `config/fairymoon3_maid_list-client.toml` 的 `[ui] dark_theme`，带 0.5 秒冷却
+
+### 界面
+
+- 整体改为米白主题，同步调整文字、按钮、滚动条、血条、头像底色以保证可读性
+- 详情文本配色：生命绿、好感红并加 ♥、坐标黄、维度金橙（背包与模型信息保持灰色）
+
 ## v0.1 — 首个公开版本
 
 ### 新增

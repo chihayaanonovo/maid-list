@@ -2,10 +2,12 @@ package com.fairymoon3.maidlist.client;
 
 import com.github.tartaricacid.touhoulittlemaid.client.resource.models.MaidModels;
 import com.github.tartaricacid.touhoulittlemaid.entity.passive.EntityMaid;
+import com.fairymoon3.maidlist.config.PanelConfig;
 import com.fairymoon3.maidlist.network.MaidEntry;
 import com.fairymoon3.maidlist.network.MaidFoxdreamPayload;
 import com.fairymoon3.maidlist.network.MaidListRequestPayload;
 import com.fairymoon3.maidlist.network.MaidOpenGuiPayload;
+import com.fairymoon3.maidlist.network.MaidSitTogglePayload;
 import com.fairymoon3.maidlist.network.MaidSummonAllPayload;
 import com.fairymoon3.maidlist.network.MaidTeleportPayload;
 import com.fairymoon3.maidlist.network.MaidTeleportToPayload;
@@ -18,6 +20,7 @@ import net.minecraft.client.gui.screens.inventory.InventoryScreen;
 import net.minecraft.client.resources.language.I18n;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.network.chat.Component;
+import net.minecraft.network.chat.MutableComponent;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.player.Player;
@@ -123,16 +126,104 @@ public class MaidPanelScreen extends Screen {
         }
     }
 
-    // ---------------------------------------------------------------- 配色
-    private static final int C_PANEL = 0xF01A1D24;
-    private static final int C_BORDER = 0xFF343B4A;
-    private static final int C_HEADER = 0xFF20242D;
-    private static final int C_ACCENT = 0xFFE8A33D;
-    private static final int C_TEXT = 0xFFEDF1F7;
-    private static final int C_SUB = 0xFF9AA3B2;
-    private static final int C_DIM = 0xFF7F8899;
+    // ---------------------------------------------------------------- 配色（白天 / 夜间可切换）
+    /** 当前是否为夜间（深色）主题，来自客户端配置。 */
+    private boolean darkMode;
+    private int cPanel;
+    private int cBorder;
+    private int cHeader;
+    private int cAccent;
+    private int cText;
+    private int cSub;
+    private int cDim;
+    private int cListBg;
+    private int cSearchBg;
+    private int cRowHover;
+    private int cRowAltA;
+    private int cRowAltB;
+    private int cRowSelected;
+    private int cBtnBg;
+    private int cBtnBorder;
+    private int cAvatarBg;
+    private int cHealthBg;
+    private int cCoolMask;
+    private int cHiLine;
+    private int cHp;
+    private int cFavor;
+    private int cPos;
+    private int cDimText;
+
     /** 狐梦联动的粉色。 */
     private static final int C_FOX = 0xFFF26D9C;
+
+    /** 米白（白天）配色。 */
+    private void applyLightTheme() {
+        cPanel = 0xF7FBF6EC;
+        cBorder = 0xFFD6C5A9;
+        cHeader = 0xFFF2E8D6;
+        cAccent = 0xFFD4802A;
+        cText = 0xFF3A3229;
+        cSub = 0xFF7C6F5C;
+        cDim = 0xFF9C8E79;
+        cListBg = 0xFFF4ECDB;
+        cSearchBg = 0xFFEAE0CB;
+        cRowHover = 0x18000000;
+        cRowAltA = 0x0A000000;
+        cRowAltB = 0x04000000;
+        cRowSelected = 0x33D4802A;
+        cBtnBg = 0xFFE9DDC6;
+        cBtnBorder = 0xFFC9B896;
+        cAvatarBg = 0xFFEDE2CC;
+        cHealthBg = 0xFFDFD2BC;
+        cCoolMask = 0x88000000;
+        cHiLine = 0xFFD4802A;
+        cHp = 0xFF2E8B2E;
+        cFavor = 0xFFD03030;
+        cPos = 0xFFA8791B;
+        cDimText = 0xFFC0661A;
+    }
+
+    /** 深色（夜间）配色：沿用 v0.1 的黑色面板。 */
+    private void applyDarkTheme() {
+        cPanel = 0xF01A1D24;
+        cBorder = 0xFF343B4A;
+        cHeader = 0xFF20242D;
+        cAccent = 0xFFE8A33D;
+        cText = 0xFFEDF1F7;
+        cSub = 0xFF9AA3B2;
+        cDim = 0xFF7F8899;
+        cListBg = 0xFF14171D;
+        cSearchBg = 0xFF0E1015;
+        cRowHover = 0x1FFFFFFF;
+        cRowAltA = 0x12FFFFFF;
+        cRowAltB = 0x08FFFFFF;
+        cRowSelected = 0x33E8A33D;
+        cBtnBg = 0xFF2A2F3A;
+        cBtnBorder = 0xFF4A5265;
+        cAvatarBg = 0xFF232732;
+        cHealthBg = 0xFF3A3F4A;
+        cCoolMask = 0xAA0E1014;
+        cHiLine = 0xFFFFE8C0;
+        cHp = 0xFF55FF55;
+        cFavor = 0xFFFF5555;
+        cPos = 0xFFFFFF55;
+        cDimText = 0xFFFFAA00;
+    }
+
+    /** 按配置刷新调色板；搜索框颜色也跟着主题走。 */
+    private void applyTheme() {
+        this.darkMode = PanelConfig.darkTheme();
+        if (this.darkMode) {
+            applyDarkTheme();
+        } else {
+            applyLightTheme();
+        }
+        if (this.searchBox != null) {
+            this.searchBox.setTextColor(cText);
+            this.searchBox.setHint(Component.translatable("fairymoon3_maid_list.search.hint")
+                    .withStyle(style -> style.withColor(cDim & 0xFFFFFF)));
+        }
+    }
 
     private List<MaidEntry> entries = new ArrayList<>();
     private UUID selected;
@@ -145,16 +236,39 @@ public class MaidPanelScreen extends Screen {
     private MaidEntry hoveredFox;
     private MaidEntry hoveredGo;
     private boolean hoveredSummonAll;
+    private boolean hoveredTheme;
+    private MaidEntry hoveredMute;
+
+    /** 主题切换按钮的冷却（0.5 秒）。 */
+    private static final long THEME_COOLDOWN_MS = 500L;
+    /** 坐下 / 起身按钮的冷却（1 秒）。 */
+    private static final long SIT_COOLDOWN_MS = 1000L;
+    private long cdThemeUntil;
+    /** 坐下 / 起身：每个女仆各自一条冷却。 */
+    private final java.util.Map<UUID, Long> cdSit = new java.util.HashMap<>();
 
     /** 面板开着时每隔若干 tick 自动刷新一次，保证狐梦转化等状态能实时出现。 */
     private int refreshTimer;
-    private static final int REFRESH_INTERVAL = 60;
+    /** 面板自动刷新间隔（tick）。1 秒一次，狐梦那边改数值能较快反映出来。 */
+    private static final int REFRESH_INTERVAL = 20;
+
+    /** 手动刷新时的列表扫光动画（毫秒）。 */
+    private static final long REFRESH_ANIM_MS = 600L;
+    private long refreshAnimStart;
+    private long refreshAnimUntil;
 
     /** 三个传送按钮各自独立的冷却（毫秒）。 */
     private static final long TP_COOLDOWN_MS = 2000L;
+    /** 召唤 / 前往：传送类按钮共用一条冷却。 */
     private long cdSummonUntil;
     private long cdGoUntil;
+    /** 一键全体召唤是全局按钮，也是共用冷却。 */
     private long cdSummonAllUntil;
+
+    private static long cdOf(java.util.Map<UUID, Long> map, MaidEntry entry) {
+        Long until = map.get(entry.uuid());
+        return until == null ? 0L : until;
+    }
 
     private static boolean onCooldown(long until) {
         return System.currentTimeMillis() < until;
@@ -220,6 +334,27 @@ public class MaidPanelScreen extends Screen {
         return panelTop() + PANEL_H - FOOTER_H;
     }
 
+    private int tpButtonX() {
+        return listRight() - TP_SIZE - 4;
+    }
+
+    private int goButtonX() {
+        return tpButtonX() - TP_SIZE - 3;
+    }
+
+    private int guiButtonX() {
+        return goButtonX() - TP_SIZE - 3;
+    }
+
+    private int foxButtonX() {
+        return guiButtonX() - TP_SIZE - 3;
+    }
+
+    /** 一行里文字可用的右边界（跟着按钮布局走）。 */
+    private int rowContentRight(MaidEntry entry) {
+        return (hasFoxdream(entry) ? foxButtonX() : guiButtonX()) - 6;
+    }
+
     private int listHeight() {
         return listBottom() - listTop();
     }
@@ -228,8 +363,16 @@ public class MaidPanelScreen extends Screen {
         return this.selected != null && this.selected.equals(entry.uuid());
     }
 
+    /** 狐梦数值区额外占用的高度：空行 + 分割线 + 标题 + 3 行数据 = 6 行。 */
+    private static final int FOX_EXTRA_H = 78;
+
+    /** 展开后的详情高度：只有已转化的女仆才多出狐梦那几行。 */
+    private int detailHeight(MaidEntry entry) {
+        return DETAIL_H + (entry.foxStats() != null ? FOX_EXTRA_H : 0);
+    }
+
     private int rowHeight(MaidEntry entry) {
-        return ROW_H + (isExpanded(entry) ? DETAIL_H : 0);
+        return ROW_H + (isExpanded(entry) ? detailHeight(entry) : 0);
     }
 
     private int contentHeight() {
@@ -369,6 +512,7 @@ public class MaidPanelScreen extends Screen {
 
     @Override
     protected void init() {
+        applyTheme();
         int sx = listLeft() + 4;
         int sy = panelTop() + HEADER_H + 5;
         int sw = PANEL_W - 16 - 54;
@@ -379,7 +523,7 @@ public class MaidPanelScreen extends Screen {
         this.searchBox.setMaxLength(32);
         this.searchBox.setHint(Component.translatable("fairymoon3_maid_list.search.hint")
                 .withStyle(ChatFormatting.DARK_GRAY));
-        this.searchBox.setTextColor(C_TEXT);
+        this.searchBox.setTextColor(cText);
         this.searchBox.setValue(this.query);
         this.searchBox.setResponder(value -> {
             this.query = value;
@@ -394,6 +538,8 @@ public class MaidPanelScreen extends Screen {
     }
 
     private void requestRefresh() {
+        this.refreshAnimStart = System.currentTimeMillis();
+        this.refreshAnimUntil = this.refreshAnimStart + REFRESH_ANIM_MS;
         PacketDistributor.sendToServer(new MaidListRequestPayload());
     }
 
@@ -421,8 +567,11 @@ public class MaidPanelScreen extends Screen {
         // 只压暗世界，不做模糊（模糊会把面板一起糊掉）
         graphics.fill(0, 0, this.width, this.height, 0x77000000);
 
+        applyTheme();
         refreshClientMaids();
         this.hoveredSummonAll = false;
+        this.hoveredTheme = false;
+        this.hoveredMute = null;
         int left = panelLeft();
         int top = panelTop();
         int right = left + PANEL_W;
@@ -430,15 +579,15 @@ public class MaidPanelScreen extends Screen {
 
         // 外框与背景
         graphics.fill(left + 3, top + 3, right + 3, bottom + 3, 0x55000000);
-        graphics.fill(left, top, right, bottom, C_PANEL);
-        graphics.fill(left, top, right, top + 1, C_BORDER);
-        graphics.fill(left, bottom - 1, right, bottom, C_BORDER);
-        graphics.fill(left, top, left + 1, bottom, C_BORDER);
-        graphics.fill(right - 1, top, right, bottom, C_BORDER);
+        graphics.fill(left, top, right, bottom, cPanel);
+        graphics.fill(left, top, right, top + 1, cBorder);
+        graphics.fill(left, bottom - 1, right, bottom, cBorder);
+        graphics.fill(left, top, left + 1, bottom, cBorder);
+        graphics.fill(right - 1, top, right, bottom, cBorder);
 
         // 标题栏
-        graphics.fill(left + 1, top + 1, right - 1, top + HEADER_H, C_HEADER);
-        graphics.fill(left + 1, top + HEADER_H - 1, right - 1, top + HEADER_H, C_ACCENT);
+        graphics.fill(left + 1, top + 1, right - 1, top + HEADER_H, cHeader);
+        graphics.fill(left + 1, top + HEADER_H - 1, right - 1, top + HEADER_H, cAccent);
 
         // 左上角：神龛图标 + 标题（文字与右上的计数统一垂直居中于图标中线）
         int iconSize = 16;
@@ -450,10 +599,10 @@ public class MaidPanelScreen extends Screen {
         drawScaledItem(graphics, ICON_SHRINE, iconX, iconY, iconSize);
         int titleX = ICON_SHRINE.isEmpty() ? left + 20 : iconX + iconSize + 4;
         Component title = Component.translatable("fairymoon3_maid_list.title");
-        panelText(graphics, title, titleX, textY, C_TEXT, false);
+        panelText(graphics, title, titleX, textY, cText, false);
         String version = modVersion();
         if (!version.isEmpty()) {
-            panelText(graphics, "v" + version, titleX + panelWidth(title) + 6, textY, C_DIM, false);
+            panelText(graphics, "v" + version, titleX + panelWidth(title) + 6, textY, cDim, false);
         }
         String count = Component.translatable("fairymoon3_maid_list.count", this.entries.size()).getString();
         int countX = right - 12 - panelWidth(count);
@@ -466,17 +615,27 @@ public class MaidPanelScreen extends Screen {
         if (allHovered) {
             this.hoveredSummonAll = true;
         }
-        drawIconButton(graphics, allX, allY, allBtn, allHovered, C_ACCENT, ICON_TRUMPET);
+        drawIconButton(graphics, allX, allY, allBtn, allHovered, cAccent, ICON_TRUMPET);
         drawCooldownOverlay(graphics, allX, allY, allBtn, this.cdSummonAllUntil);
 
-        panelText(graphics, count, countX, textY, C_ACCENT, false);
+        // 主题切换（太阳 / 月亮）
+        int themeBtn = 16;
+        int themeX = themeButtonX();
+        boolean themeHovered = inRect(mouseX, mouseY, themeX, allY, themeBtn);
+        if (themeHovered) {
+            this.hoveredTheme = true;
+        }
+        drawThemeButton(graphics, themeX, allY, themeBtn, themeHovered);
+        drawCooldownOverlay(graphics, themeX, allY, themeBtn, themeBtn, this.cdThemeUntil, THEME_COOLDOWN_MS);
+
+        panelText(graphics, count, countX, textY, cAccent, false);
 
         // 搜索栏底（与 init() 里的 EditBox 严格对齐）
         int sx = listLeft() + 4;
         int sy = top + HEADER_H + 5;
         int sw = PANEL_W - 16 - 54;
-        graphics.fill(sx - 3, sy - 3, sx + sw + 3, sy + 15, 0xFF0E1015);
-        graphics.fill(sx - 3, sy - 3, sx - 2, sy + 15, C_BORDER);
+        graphics.fill(sx - 3, sy - 3, sx + sw + 3, sy + 15, cSearchBg);
+        graphics.fill(sx - 3, sy - 3, sx - 2, sy + 15, cBorder);
 
         // 列表
         this.hoveredTp = null;
@@ -484,15 +643,23 @@ public class MaidPanelScreen extends Screen {
         this.hoveredFox = null;
         this.hoveredGo = null;
         drawList(graphics, mouseX, mouseY);
+        drawRefreshAnimation(graphics);
 
         // 底部提示（居中）
         Component hint = Component.translatable("fairymoon3_maid_list.hint");
-        panelCenter(graphics, hint, (left + right) / 2, bottom - 13, C_DIM);
+        panelCenter(graphics, hint, (left + right) / 2, bottom - 13, cDim);
 
         super.render(graphics, mouseX, mouseY, partialTick);
 
         // 按钮的浮层提示放在最后画，避免被列表裁剪
-        if (this.hoveredSummonAll) {
+        if (this.hoveredMute != null) {
+            panelTooltip(graphics, Component.translatable(MaidMuteStore.isMuted(this.hoveredMute.uuid())
+                    ? "fairymoon3_maid_list.voice.unmute"
+                    : "fairymoon3_maid_list.voice.mute"), mouseX, mouseY);
+        } else if (this.hoveredTheme) {
+            panelTooltip(graphics, Component.translatable("fairymoon3_maid_list.theme.tooltip"),
+                    mouseX, mouseY);
+        } else if (this.hoveredSummonAll) {
             panelTooltip(graphics, Component.translatable("fairymoon3_maid_list.summon_all.tooltip"),
                     mouseX, mouseY);
         } else if (this.hoveredFox != null) {
@@ -511,6 +678,79 @@ public class MaidPanelScreen extends Screen {
                     : Component.translatable("fairymoon3_maid_list.tp.tooltip");
             panelTooltip(graphics, tip, mouseX, mouseY);
         }
+    
+        drawStars(graphics);
+    }
+
+    // ------------------------------------------------------------------ 左上角神龛互动
+
+    private record UiStar(double x, double y, double vx, double vy, long born, int color) {
+    }
+
+    private static final long STAR_LIFE_MS = 900L;
+    private final java.util.List<UiStar> uiStars = new java.util.ArrayList<>();
+
+    private boolean isOverShrine(double mouseX, double mouseY) {
+        int iconSize = 16;
+        int iconX = panelLeft() + 6;
+        int iconY = panelTop() + (HEADER_H - iconSize) / 2;
+        return inRect(mouseX, mouseY, iconX, iconY, iconSize);
+    }
+
+    /** 点神龛：叫一声（原版猫叫），没有冷却。 */
+    private void playMeow() {
+        try {
+            if (this.minecraft == null) {
+                return;
+            }
+            this.minecraft.getSoundManager().play(
+                    net.minecraft.client.resources.sounds.SimpleSoundInstance.forUI(
+                            net.minecraft.sounds.SoundEvents.CAT_AMBIENT, 1.0F, 1.0F));
+        } catch (Throwable ignored) {
+            // 声音失败不影响界面
+        }
+    }
+
+    /** 点神龛：从点击处散出一圈星星。 */
+    private void spawnStars(double cx, double cy) {
+        var rnd = java.util.concurrent.ThreadLocalRandom.current();
+        long now = System.currentTimeMillis();
+        int count = 10;
+        for (int i = 0; i < count; i++) {
+            double angle = (Math.PI * 2.0 * i / count) + rnd.nextDouble() * 0.6;
+            double speed = 16.0 + rnd.nextDouble() * 26.0;
+            int color = switch (i % 3) {
+                case 0 -> 0xFFFFE9A3;
+                case 1 -> 0xFFFFC46B;
+                default -> 0xFFFFF7DC;
+            };
+            this.uiStars.add(new UiStar(cx, cy,
+                    Math.cos(angle) * speed,
+                    Math.sin(angle) * speed - 12.0,
+                    now, color));
+        }
+    }
+
+    private void drawStars(GuiGraphics graphics) {
+        if (this.uiStars.isEmpty()) {
+            return;
+        }
+        long now = System.currentTimeMillis();
+        this.uiStars.removeIf(star -> now - star.born() > STAR_LIFE_MS);
+        for (UiStar star : this.uiStars) {
+            float t = (now - star.born()) / (float) STAR_LIFE_MS;
+            int alpha = (int) (255.0F * (1.0F - t));
+            if (alpha <= 6) {
+                continue;
+            }
+            double px = star.x() + star.vx() * t;
+            double py = star.y() + star.vy() * t + 70.0 * t * t;
+            int color = (alpha << 24) | (star.color() & 0xFFFFFF);
+            int ix = (int) Math.round(px);
+            int iy = (int) Math.round(py);
+            graphics.fill(ix, iy - 2, ix + 1, iy + 3, color);
+            graphics.fill(ix - 2, iy, ix + 3, iy + 1, color);
+        }
     }
 
     private void drawList(GuiGraphics graphics, int mouseX, int mouseY) {
@@ -518,13 +758,13 @@ public class MaidPanelScreen extends Screen {
         int lx = listLeft();
         int rx = listRight();
 
-        graphics.fill(lx, listTop(), rx, listBottom(), 0xFF14171D);
+        graphics.fill(lx, listTop(), rx, listBottom(), cListBg);
 
         if (list.isEmpty()) {
             Component empty = this.entries.isEmpty()
                     ? Component.translatable("fairymoon3_maid_list.empty")
                     : Component.translatable("fairymoon3_maid_list.empty.search");
-            panelCenter(graphics, empty, (lx + rx) / 2, listTop() + 40, C_DIM);
+            panelCenter(graphics, empty, (lx + rx) / 2, listTop() + 40, cDim);
             return;
         }
 
@@ -556,8 +796,8 @@ public class MaidPanelScreen extends Screen {
         for (MaidEntry entry : visibleEntries()) {
             int h = rowHeight(entry);
             if (entry.uuid().equals(this.dragging)) {
-                graphics.fill(lx, y, rx, y + 1, 0xFFFFE8C0);
-                graphics.fill(lx, y + h - 1, rx, y + h, 0xFFFFE8C0);
+                graphics.fill(lx, y, rx, y + 1, cHiLine);
+                graphics.fill(lx, y + h - 1, rx, y + h, cHiLine);
             }
             y += h + ROW_GAP;
         }
@@ -586,8 +826,8 @@ public class MaidPanelScreen extends Screen {
         int barH = Math.max(16, (int) (view * (view / (double) total)));
         double max = total - view;
         int barY = trackTop + (int) ((view - barH) * (this.scroll / max));
-        graphics.fill(trackX, trackTop, trackX + 2, trackTop + view, 0x22000000);
-        graphics.fill(trackX, barY, trackX + 2, barY + barH, 0x88E8A33D);
+        graphics.fill(trackX, trackTop, trackX + 2, trackTop + view, 0x14000000);
+        graphics.fill(trackX, barY, trackX + 2, barY + barH, 0x99D4802A);
     }
 
     private void drawRow(GuiGraphics graphics, MaidEntry entry, int index, int x, int y, int w, int h,
@@ -595,24 +835,32 @@ public class MaidPanelScreen extends Screen {
         boolean expanded = isExpanded(entry);
         boolean hovered = mouseX >= x && mouseX <= x + w && mouseY >= y && mouseY <= y + h;
 
-        int bg = expanded ? 0x33E8A33D : hovered ? 0x1FFFFFFF : (index % 2 == 0 ? 0x12FFFFFF : 0x08FFFFFF);
+        int bg = expanded ? cRowSelected : hovered ? cRowHover : (index % 2 == 0 ? cRowAltA : cRowAltB);
         graphics.fill(x, y, x + w, y + h, bg);
         if (expanded) {
-            graphics.fill(x, y, x + 2, y + h, C_ACCENT);
+            graphics.fill(x, y, x + 2, y + h, cAccent);
         }
 
         // 头像：直接渲染女仆实体（跟随模型）
         int ax = x + 5;
         int ay = y + 5;
         drawAvatar(graphics, entry, ax, ay, AVATAR);
+        boolean muted = MaidMuteStore.isMuted(entry.uuid());
+        boolean speaking = MaidSpeechTracker.isSpeaking(entry.uuid());
+        if (muted || speaking) {
+            drawSpeakingBadge(graphics, ax, ay, muted);
+            if (inRect(mouseX, mouseY, ax - 2, ay - 2, 9)) {
+                this.hoveredMute = entry;
+            }
+        }
 
         int textX = ax + AVATAR + 6;
         int btnY = y + 9;
         boolean foxAvailable = hasFoxdream(entry);
-        int tpX = x + w - TP_SIZE - 4;
-        int goX = tpX - TP_SIZE - 3;
-        int guiX = goX - TP_SIZE - 3;
-        int foxX = guiX - TP_SIZE - 3;
+        int tpX = tpButtonX();
+        int goX = goButtonX();
+        int guiX = guiButtonX();
+        int foxX = foxButtonX();
         boolean tpHovered = inRect(mouseX, mouseY, tpX, btnY, TP_SIZE);
         boolean goHovered = inRect(mouseX, mouseY, goX, btnY, TP_SIZE);
         boolean guiHovered = inRect(mouseX, mouseY, guiX, btnY, TP_SIZE);
@@ -630,7 +878,7 @@ public class MaidPanelScreen extends Screen {
             this.hoveredFox = entry;
         }
 
-        int contentRight = (foxAvailable ? foxX : guiX) - 6;
+        int contentRight = rowContentRight(entry);
         int healthW = 34;
         int healthX = contentRight - healthW;
 
@@ -639,24 +887,37 @@ public class MaidPanelScreen extends Screen {
         int distW = panelWidth(dist);
         int nameMax = contentRight - distW - 8 - textX;
         String name = trimToWidth(entry.name(), nameMax);
-        panelText(graphics, name, textX, y + 5, C_TEXT, false);
+        panelText(graphics, name, textX, y + 5, cText, false);
 
         int stage = foxdreamStage(entry);
+        int cursorX = textX + panelWidth(name) + 5;
         if (stage >= 0) {
-            String label = foxStageLabel(stage);
-            int chipX = textX + panelWidth(name) + 5;
-            int chipW = panelWidth(label) + 6;
-            if (chipX + chipW <= contentRight - distW - 4) {
-                graphics.fill(chipX, y + 4, chipX + chipW, y + 14, foxStageColor(stage));
-                panelText(graphics, label, chipX + 3, y + 5, 0xFFFFFFFF, false);
+            // 成长阶段：保留自己的彩色底 + 白字
+            String stageLabel = foxStageLabel(stage);
+            int chipW = panelWidth(stageLabel) + 6;
+            if (cursorX + chipW <= contentRight - distW - 4) {
+                graphics.fill(cursorX, y + 4, cursorX + chipW, y + 14, foxStageColor(stage));
+                panelText(graphics, stageLabel, cursorX + 3, y + 5, 0xFFFFFFFF, false);
+                cursorX += chipW + 4;
+            }
+            // 初始性格：独立文本，不共用底色，颜色跟随日间 / 夜间主题
+            var fox = entry.foxStats();
+            if (fox != null && fox.personality() != null && !fox.personality().isBlank()) {
+                String tag = tr("fairymoon3_maid_list.fox.personality", fox.personality());
+                if (cursorX + panelWidth(tag) <= contentRight - distW - 4) {
+                    panelText(graphics, tag, cursorX, y + 5, cSub, false);
+                }
             }
         }
-        panelText(graphics, dist, contentRight - distW, y + 5, C_SUB, false);
+        panelText(graphics, dist, contentRight - distW, y + 5, cSub, false);
 
         // 第二行：状态点 + 状态 + 职业 + 等级
         MaidEntry.Status status = entry.status();
         graphics.fill(textX, y + 19, textX + 4, y + 23, status.color);
         String statusText = tr(status.translationKey);
+        if (entry.sittingWithAggro()) {
+            statusText = statusText + tr("fairymoon3_maid_list.status.sitting.aggro");
+        }
         panelText(graphics, statusText, textX + 7, y + 18, status.color, false);
 
         int used = textX + 7 + panelWidth(statusText) + 6;
@@ -664,13 +925,13 @@ public class MaidPanelScreen extends Screen {
                 ? taskName(entry)
                 : tr("fairymoon3_maid_list.detail.chunk", entry.chunkX(), entry.chunkZ());
         String trimmed = trimToWidth(detail, healthX - 8 - used);
-        panelText(graphics, trimmed, used, y + 18, C_SUB, false);
+        panelText(graphics, trimmed, used, y + 18, cSub, false);
 
         // 血条
         if (entry.loaded()) {
             drawHealthBar(graphics, entry, healthX, y + 19, healthW, 3);
         } else {
-            graphics.fill(healthX, y + 19, healthX + healthW, y + 22, 0xFF2A2F3A);
+            graphics.fill(healthX, y + 19, healthX + healthW, y + 22, cBtnBg);
         }
 
         // 按钮：狐梦手册 / 女仆背包 / 前往她身边 / 召唤到身边
@@ -679,18 +940,51 @@ public class MaidPanelScreen extends Screen {
         }
         drawIconButton(graphics, guiX, btnY, TP_SIZE, guiHovered, 0xFF8FD1E8, ICON_BAG);
         drawIconButton(graphics, goX, btnY, TP_SIZE, goHovered, 0xFFB39DFF, ICON_EYE);
-        drawIconButton(graphics, tpX, btnY, TP_SIZE, tpHovered, C_ACCENT, ICON_BELL);
+        drawIconButton(graphics, tpX, btnY, TP_SIZE, tpHovered, cAccent, ICON_BELL);
         drawCooldownOverlay(graphics, goX, btnY, TP_SIZE, this.cdGoUntil);
         drawCooldownOverlay(graphics, tpX, btnY, TP_SIZE, this.cdSummonUntil);
 
         if (expanded) {
-            drawDetails(graphics, entry, textX, y + ROW_H - 2);
+            drawDetails(graphics, entry, textX, y + ROW_H - 2, contentRight, mouseX, mouseY);
         }
     }
 
     /** 头像：优先渲染真实女仆模型，失败/未加载时退回职业图标。 */
+    /**
+     * 正在说话的小标记：头像左上角一个 9×9 的小底板，里面三根随音量跳动的竖条。
+     *
+     * @param ax 头像左上角 X
+     * @param ay 头像左上角 Y
+     */
+    private void drawSpeakingBadge(GuiGraphics graphics, int ax, int ay, boolean muted) {
+        int size = 9;
+        int bx = ax - 2;
+        int by = ay - 2;
+        graphics.fill(bx, by, bx + size, by + size, 0xE0201C16);
+        graphics.fill(bx, by, bx + size, by + 1, muted ? 0xFF9AA0AA : 0xFFFFD98A);
+        if (muted) {
+            // 静音：灰色音量条 + 红色斜杠
+            for (int i = 0; i < 3; i++) {
+                int col = bx + 2 + i * 2;
+                graphics.fill(col, by + 4 + (i % 2), col + 1, by + size - 2, 0xFF7E838C);
+            }
+            for (int i = 0; i < 5; i++) {
+                graphics.fill(bx + 1 + i, by + size - 2 - i, bx + 2 + i, by + size - 1 - i, 0xFFFF6B6B);
+            }
+        } else {
+            long t = System.currentTimeMillis();
+            for (int i = 0; i < 3; i++) {
+                double phase = t / 130.0 + i * 1.3;
+                int barH = 2 + (int) Math.round(4.0 * Math.abs(Math.sin(phase)));
+                int col = bx + 2 + i * 2;
+                int bottom = by + size - 2;
+                graphics.fill(col, bottom - barH, col + 1, bottom, 0xFFFFE9A3);
+            }
+        }
+    }
+
     private void drawAvatar(GuiGraphics graphics, MaidEntry entry, int x, int y, int size) {
-        graphics.fill(x, y, x + size, y + size, 0xFF232732);
+        graphics.fill(x, y, x + size, y + size, cAvatarBg);
         boolean painted = false;
 
         EntityMaid maid = clientMaid(entry.uuid());
@@ -767,23 +1061,93 @@ public class MaidPanelScreen extends Screen {
     }
 
     /** 冷却遮罩：从底部向上覆盖，顶部一条高亮线。 */
+    /** 手动刷新时，在列表区域扫过一道光带，给玩家"列表已刷新"的反馈。 */
+    private void drawRefreshAnimation(GuiGraphics graphics) {
+        long now = System.currentTimeMillis();
+        if (this.refreshAnimStart <= 0L || now >= this.refreshAnimUntil) {
+            return;
+        }
+        float progress = (now - this.refreshAnimStart) / (float) REFRESH_ANIM_MS;
+        progress = Math.max(0.0F, Math.min(1.0F, progress));
+        int lx = listLeft();
+        int rx = listRight();
+        int top = listTop();
+        int bottom = listBottom();
+        if (bottom <= top) {
+            return;
+        }
+        int band = 18;
+        int center = top + (int) ((bottom - top + band) * progress) - band / 2;
+        int from = Math.max(top, center - band / 2);
+        int to = Math.min(bottom, center + band / 2);
+        if (to > from) {
+            graphics.fill(lx, from, rx, to, 0x26D4802A);
+            int edge = Math.max(from, Math.min(to - 1, center));
+            graphics.fill(lx, edge, rx, Math.min(to, edge + 2), 0x66D4802A);
+        }
+    }
+
     private void drawCooldownOverlay(GuiGraphics graphics, int x, int y, int size, long until) {
+        drawCooldownOverlay(graphics, x, y, size, size, until, TP_COOLDOWN_MS);
+    }
+
+    private void drawCooldownOverlay(GuiGraphics graphics, int x, int y, int w, int h,
+                                     long until, long totalMs) {
         long now = System.currentTimeMillis();
         if (now >= until) {
             return;
         }
-        float remain = (until - now) / (float) TP_COOLDOWN_MS;
+        float remain = (until - now) / (float) totalMs;
         remain = Math.max(0.0F, Math.min(1.0F, remain));
-        int h = Math.max(1, (int) (size * remain));
-        graphics.fill(x, y + size - h, x + size, y + size, 0xAA0E1014);
-        graphics.fill(x, y + size - h, x + size, y + size - h + 1, 0xFFFFE8C0);
+        int barH = Math.max(1, (int) (h * remain));
+        graphics.fill(x, y + h - barH, x + w, y + h, cCoolMask);
+        graphics.fill(x, y + h - barH, x + w, y + h - barH + 1, cHiLine);
+    }
+
+    /** 实心圆（逐行填充），用于画太阳 / 月亮图标。 */
+    private static void fillDisc(GuiGraphics graphics, int cx, int cy, int radius, int color) {
+        for (int dy = -radius; dy <= radius; dy++) {
+            int dx = (int) Math.sqrt(radius * radius - dy * dy);
+            graphics.fill(cx - dx, cy + dy, cx + dx + 1, cy + dy + 1, color);
+        }
+    }
+
+    /**
+     * 主题切换按钮：直接画太阳 / 月亮图标，不再加底色块。
+     *
+     * <p>白天用深一档的琥珀色太阳 + 灰蓝月亮，夜间用亮色，两种主题下都能看清。</p>
+     */
+    private void drawThemeButton(GuiGraphics graphics, int x, int y, int size, boolean hovered) {
+        if (hovered) {
+            int c = cAccent;
+            graphics.fill(x, y, x + size, y + 1, c);
+            graphics.fill(x, y + size - 1, x + size, y + size, c);
+            graphics.fill(x, y, x + 1, y + size, c);
+            graphics.fill(x + size - 1, y, x + size, y + size, c);
+        }
+        int cx = x + size / 2;
+        int cy = y + size / 2;
+        if (this.darkMode) {
+            // 月亮：圆盘 + 用表头底色挖出月牙
+            int moon = 0xFFE8ECF7;
+            fillDisc(graphics, cx, cy, 5, moon);
+            fillDisc(graphics, cx + 3, cy - 2, 5, cHeader);
+        } else {
+            // 太阳：圆盘 + 四向光芒
+            int sun = 0xFFE0952B;
+            fillDisc(graphics, cx, cy, 4, sun);
+            graphics.fill(cx, cy - 8, cx + 1, cy - 6, sun);
+            graphics.fill(cx, cy + 6, cx + 1, cy + 8, sun);
+            graphics.fill(cx - 8, cy, cx - 6, cy + 1, sun);
+            graphics.fill(cx + 6, cy, cx + 8, cy + 1, sun);
+        }
     }
 
     /** 统一的小按钮：底色 + 顶部描边 + 缩小后的物品图标。 */
     private void drawIconButton(GuiGraphics graphics, int bx, int by, int size,
                                 boolean hovered, int accent, ItemStack icon) {
-        graphics.fill(bx, by, bx + size, by + size, hovered ? accent : 0xFF2A2F3A);
-        graphics.fill(bx, by, bx + size, by + 1, hovered ? 0xFFFFE8C0 : 0xFF4A5265);
+        graphics.fill(bx, by, bx + size, by + size, hovered ? accent : cBtnBg);
+        graphics.fill(bx, by, bx + size, by + 1, hovered ? cHiLine : cBtnBorder);
 
         if (icon.isEmpty()) {
             return;
@@ -854,38 +1218,132 @@ public class MaidPanelScreen extends Screen {
         return mouseX >= x && mouseX <= x + size && mouseY >= y && mouseY <= y + size;
     }
 
+    private static boolean inRect(double mouseX, double mouseY, int x, int y, int w, int h) {
+        return mouseX >= x && mouseX <= x + w && mouseY >= y && mouseY <= y + h;
+    }
+
     private void drawHealthBar(GuiGraphics graphics, MaidEntry entry, int x, int y, int w, int h) {
-        graphics.fill(x, y, x + w, y + h, 0xFF3A3F4A);
+        graphics.fill(x, y, x + w, y + h, cHealthBg);
         int fill = (int) (w * entry.healthRatio());
         if (fill > 0) {
             graphics.fill(x, y, x + fill, y + h, healthColor(entry.healthRatio()));
         }
     }
 
-    private void drawDetails(GuiGraphics graphics, MaidEntry entry, int x, int y) {
+    private static final int SIT_BTN_W = 46;
+    private static final int SIT_BTN_H = 13;
+    private int[] sitButtonRect(int rightEdge, int detailTop) {
+        return new int[]{rightEdge - SIT_BTN_W, detailTop + 2, SIT_BTN_W, SIT_BTN_H};
+    }
+
+    private void drawTextButton(GuiGraphics graphics, int bx, int by, int bw, int bh,
+                                String label, boolean hovered) {
+        graphics.fill(bx, by, bx + bw, by + bh, hovered ? cAccent : cBtnBg);
+        graphics.fill(bx, by, bx + bw, by + 1, hovered ? 0xFFFFFFFF : cBtnBorder);
+        int color = hovered ? 0xFFFFFFFF : cText;
+        panelText(graphics, label, bx + (bw - panelWidth(label)) / 2, by + 3, color, false);
+    }
+
+    private static MutableComponent dimensionComponent(ResourceLocation id) {
+        return Component.translatable(id.toLanguageKey("dimension"));
+    }
+
+    private void drawDetails(GuiGraphics graphics, MaidEntry entry, int x, int y,
+                             int rightEdge, int mouseX, int mouseY) {
         int lineY = y + 4;
         int gap = 13;
 
-        Component line1 = Component.translatable("fairymoon3_maid_list.detail.vitals",
-                entry.health(), entry.maxHealth(), entry.favorability(), entry.favorLevel());
-        panelText(graphics, line1, x, lineY, C_SUB, false);
+        // 生命（绿）+ 好感♥（红）
+        Component vitals = Component.translatable("fairymoon3_maid_list.detail.hp",
+                        entry.health(), entry.maxHealth())
+                .withStyle(style -> style.withColor(cHp))
+                .append(Component.literal("    "))
+                .append(Component.translatable("fairymoon3_maid_list.detail.favor",
+                                entry.favorability(), entry.favorLevel())
+                        .withStyle(style -> style.withColor(cFavor)));
+        panelText(graphics, vitals, x, lineY, 0xFFFFFFFF, false);
 
+        // 坐标（黄）+ 维度（金橙）
         lineY += gap;
-        Component line2 = entry.loaded()
+        MutableComponent posPart = entry.loaded()
                 ? Component.translatable("fairymoon3_maid_list.detail.pos",
-                Math.round(entry.x()), Math.round(entry.y()), Math.round(entry.z()),
-                dimensionName(entry.dimension()))
+                        Math.round(entry.x()), Math.round(entry.y()), Math.round(entry.z()))
                 : Component.translatable("fairymoon3_maid_list.detail.pos.chunk",
-                entry.chunkX(), entry.chunkZ(), dimensionName(entry.dimension()));
-        panelText(graphics, line2, x, lineY, C_DIM, false);
+                        entry.chunkX(), entry.chunkZ());
+        posPart = posPart.withStyle(style -> style.withColor(cPos));
+        Component line2 = posPart
+                .append(Component.literal(" · "))
+                .append(dimensionComponent(entry.dimension())
+                        .withStyle(style -> style.withColor(cDimText)));
+        panelText(graphics, line2, x, lineY, 0xFFFFFFFF, false);
 
+        // 背包 / 模型（保持灰色）
         lineY += gap;
         Component gear = entry.hasBackpack()
                 ? Component.translatable("fairymoon3_maid_list.detail.gear",
                 entry.backpackName().isEmpty() ? tr("fairymoon3_maid_list.unknown") : entry.backpackName(),
                 modelName(entry))
                 : Component.translatable("fairymoon3_maid_list.detail.gear_none", modelName(entry));
-        panelText(graphics, gear, x, lineY, C_DIM, false);
+        panelText(graphics, gear, x, lineY, cDim, false);
+
+        // 狐梦成长数值（只对已转化的女仆）
+        foxdreamStage(entry);
+        var fox = entry.foxStats();
+        if (fox != null) {
+            // 先空一行，再画一条分割线，然后是简报标题
+            lineY += gap;
+            graphics.fill(x, lineY + 4, Math.max(x + 20, rightEdge - SIT_BTN_W - 6), lineY + 5, cBorder);
+            lineY += gap;
+            panelText(graphics, tr("fairymoon3_maid_list.fox.brief"), x, lineY, cAccent, false);
+
+            lineY += gap;
+            MutableComponent l4 = Component.translatable("fairymoon3_maid_list.fox.sleep", fox.sleep())
+                    .withStyle(style -> style.withColor(0xFF3F9FD6))
+                    .append(Component.literal("   "))
+                    .append(Component.translatable("fairymoon3_maid_list.fox.satisfaction", fox.satisfaction())
+                            .withStyle(style -> style.withColor(0xFFC97A16)))
+                    .append(Component.literal("   "))
+                    .append(Component.translatable("fairymoon3_maid_list.fox.mood", fox.mood())
+                            .withStyle(style -> style.withColor(0xFFB255C8)));
+            panelText(graphics, l4, x, lineY, 0xFFFFFFFF, false);
+
+            lineY += gap;
+            MutableComponent l5 = Component.translatable("fairymoon3_maid_list.fox.trust",
+                            fox.trustLevel(), fox.trustPercent())
+                    .withStyle(style -> style.withColor(cText))
+                    .append(Component.literal("    "))
+                    .append(Component.translatable("fairymoon3_maid_list.fox.favor",
+                                    fox.favorLevel(), fox.favorPoints(), fox.favorCap())
+                            .withStyle(style -> style.withColor(cSub)))
+                    .append(Component.literal("    "))
+                    .append(Component.translatable("fairymoon3_maid_list.fox.days", fox.daysText())
+                            .withStyle(style -> style.withColor(cSub)));
+            panelText(graphics, l5, x, lineY, 0xFFFFFFFF, false);
+
+            lineY += gap;
+            MutableComponent l6 = Component.translatable("fairymoon3_maid_list.fox.meals")
+                    .withStyle(style -> style.withColor(cSub));
+            for (int i = 0; i < 3; i++) {
+                boolean eaten = fox.mealEaten(i);
+                l6.append(Component.literal("   "))
+                        .append(Component.translatable("fairymoon3_maid_list.fox.meal." + i)
+                                .withStyle(style -> style.withColor(cText)))
+                        .append(Component.literal(" "))
+                        .append(Component.literal(tr(eaten
+                                        ? "fairymoon3_maid_list.fox.check"
+                                        : "fairymoon3_maid_list.fox.cross"))
+                                .withStyle(style -> style.withColor(eaten ? 0xFF2E8B2E : 0xFFD03030)));
+            }
+            panelText(graphics, l6, x, lineY, 0xFFFFFFFF, false);
+        }
+
+        // 坐下 / 起身 按钮
+        int[] r = sitButtonRect(rightEdge, y);
+        boolean hovered = inRect(mouseX, mouseY, r[0], r[1], r[2], r[3]);
+        drawTextButton(graphics, r[0], r[1], r[2], r[3],
+                tr(entry.sitting() ? "fairymoon3_maid_list.sit.standup" : "fairymoon3_maid_list.sit.sitdown"),
+                hovered);
+        drawCooldownOverlay(graphics, r[0], r[1], r[2], r[3], cdOf(this.cdSit, entry), SIT_COOLDOWN_MS);
     }
 
     private int favorColor(int level) {
@@ -894,7 +1352,7 @@ public class MaidPanelScreen extends Screen {
             case 1 -> 0xFF7ED07E;
             case 2 -> 0xFF8FD1E8;
             case 3 -> 0xFF9C8CF0;
-            case 4 -> 0xFFE8A33D;
+            case 4 -> cHiLine;
             default -> 0xFFF26D9C;
         };
     }
@@ -965,7 +1423,7 @@ public class MaidPanelScreen extends Screen {
         if (top == Integer.MIN_VALUE) {
             return false;
         }
-        return inRect(mouseX, mouseY, listRight() - TP_SIZE - 4, top + 9, TP_SIZE);
+        return inRect(mouseX, mouseY, tpButtonX(), top + 9, TP_SIZE);
     }
 
     private boolean isOverGuiButton(MaidEntry entry, double mouseX, double mouseY) {
@@ -973,7 +1431,7 @@ public class MaidPanelScreen extends Screen {
         if (top == Integer.MIN_VALUE) {
             return false;
         }
-        return inRect(mouseX, mouseY, listRight() - TP_SIZE * 3 - 10, top + 9, TP_SIZE);
+        return inRect(mouseX, mouseY, guiButtonX(), top + 9, TP_SIZE);
     }
 
     private boolean isOverGoButton(MaidEntry entry, double mouseX, double mouseY) {
@@ -981,7 +1439,7 @@ public class MaidPanelScreen extends Screen {
         if (top == Integer.MIN_VALUE) {
             return false;
         }
-        return inRect(mouseX, mouseY, listRight() - TP_SIZE * 2 - 7, top + 9, TP_SIZE);
+        return inRect(mouseX, mouseY, goButtonX(), top + 9, TP_SIZE);
     }
 
     private boolean isOverFoxButton(MaidEntry entry, double mouseX, double mouseY) {
@@ -992,18 +1450,30 @@ public class MaidPanelScreen extends Screen {
         if (top == Integer.MIN_VALUE) {
             return false;
         }
-        return inRect(mouseX, mouseY, listRight() - TP_SIZE * 4 - 13, top + 9, TP_SIZE);
+        return inRect(mouseX, mouseY, foxButtonX(), top + 9, TP_SIZE);
+    }
+
+    /** 标题栏「全部召唤」按钮的 X。 */
+    private int summonAllButtonX() {
+        String count = Component.translatable("fairymoon3_maid_list.count", this.entries.size()).getString();
+        return panelLeft() + PANEL_W - 12 - panelWidth(count) - 6 - 16;
+    }
+
+    /** 标题栏「主题切换」按钮的 X。 */
+    private int themeButtonX() {
+        return summonAllButtonX() - 4 - 16;
     }
 
     /** 标题栏「全部召唤」按钮的判定区域。 */
     private boolean isOverSummonAllButton(double mouseX, double mouseY) {
-        int right = panelLeft() + PANEL_W;
-        String count = Component.translatable("fairymoon3_maid_list.count", this.entries.size()).getString();
-        int countX = right - 12 - panelWidth(count);
-        int allBtn = 16;
-        int allX = countX - 6 - allBtn;
         int allY = panelTop() + (HEADER_H - 16) / 2;
-        return inRect(mouseX, mouseY, allX, allY, allBtn);
+        return inRect(mouseX, mouseY, summonAllButtonX(), allY, 16);
+    }
+
+    /** 标题栏「主题切换」按钮的判定区域。 */
+    private boolean isOverThemeButton(double mouseX, double mouseY) {
+        int allY = panelTop() + (HEADER_H - 16) / 2;
+        return inRect(mouseX, mouseY, themeButtonX(), allY, 16);
     }
 
     @Override
@@ -1018,6 +1488,19 @@ public class MaidPanelScreen extends Screen {
 
     @Override
     public boolean mouseClicked(double mouseX, double mouseY, int button) {
+        if (button == 0 && isOverShrine(mouseX, mouseY)) {
+            playMeow();
+            spawnStars(mouseX, mouseY);
+            return true;
+        }
+        if (button == 0 && isOverThemeButton(mouseX, mouseY)) {
+            if (!onCooldown(this.cdThemeUntil)) {
+                this.cdThemeUntil = System.currentTimeMillis() + THEME_COOLDOWN_MS;
+                PanelConfig.toggleDarkTheme();
+                applyTheme();
+            }
+            return true;
+        }
         if (button == 0 && isOverSummonAllButton(mouseX, mouseY)) {
             if (!onCooldown(this.cdSummonAllUntil)) {
                 this.cdSummonAllUntil = System.currentTimeMillis() + TP_COOLDOWN_MS;
@@ -1028,6 +1511,12 @@ public class MaidPanelScreen extends Screen {
         if (button == 0) {
             MaidEntry hit = rowAt(mouseX, mouseY);
             if (hit != null) {
+                int rowTop = rowTopOf(hit);
+                if (rowTop != Integer.MIN_VALUE
+                        && inRect(mouseX, mouseY, listLeft() + 5 - 2, rowTop + 5 - 2, 9)) {
+                    MaidMuteStore.toggle(hit.uuid());
+                    return true;
+                }
                 if (isOverFoxButton(hit, mouseX, mouseY)) {
                     PacketDistributor.sendToServer(new MaidFoxdreamPayload(hit.uuid()));
                     return true;
@@ -1049,6 +1538,19 @@ public class MaidPanelScreen extends Screen {
                         PacketDistributor.sendToServer(new MaidTeleportPayload(hit.uuid()));
                     }
                     return true;
+                }
+                if (isExpanded(hit)) {
+                    int top = rowTopOf(hit);
+                    if (top != Integer.MIN_VALUE) {
+                        int[] r = sitButtonRect(rowContentRight(hit), top + ROW_H - 2);
+                        if (inRect(mouseX, mouseY, r[0], r[1], r[2], r[3])) {
+                            if (!onCooldown(cdOf(this.cdSit, hit))) {
+                                this.cdSit.put(hit.uuid(), System.currentTimeMillis() + SIT_COOLDOWN_MS);
+                                PacketDistributor.sendToServer(new MaidSitTogglePayload(hit.uuid()));
+                            }
+                            return true;
+                        }
+                    }
                 }
                 this.selected = isExpanded(hit) ? null : hit.uuid();
                 clampScroll();

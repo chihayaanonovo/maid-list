@@ -36,7 +36,7 @@ public class MaidOpenGuiPacketMixin {
             ),
             remap = false)
     private static float maidList$ignoreOpenGuiDistance(EntityMaid maid, Entity player) {
-        if (!PanelConfig.REMOTE_MAID_CONTAINER.get()) {
+        if (!PanelConfig.remoteMaidContainer()) {
             return maid.distanceTo(player);
         }
         if (LOGGED.compareAndSet(false, true)) {

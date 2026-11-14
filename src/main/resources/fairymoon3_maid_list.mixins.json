@@ -10,7 +10,10 @@
     "CareOrderedSleepRangeMixin"
   ],
   "client": [
-    "CareScreenDistanceMixin"
+    "CareScreenDistanceMixin",
+    "MaidSpeechMixin",
+    "MaidSpeechAtPosMixin",
+    "MaidSpeechEntityMixin"
   ],
   "injectors": {
     "defaultRequire": 1

@@ -50,7 +50,9 @@ public record MaidEntry(
         /** 玩家「获得」这只女仆的时间戳（毫秒），来自 MaidWorldData 的索引记录；0 表示未知。 */
         long acquiredAt,
         /** 仅对「未加载、来自快照」的记录有意义：多少秒之前记录的，0 表示实时。 */
-        int ageSeconds
+        int ageSeconds,
+        /** 狐梦成长数值；未转化 / 未安装 foxdream / 来自缓存快照时为 null。 */
+        FoxStats foxStats
 ) {
 
     /** 复制一份并设置「多久之前」。 */
@@ -58,15 +60,16 @@ public record MaidEntry(
         return new MaidEntry(uuid, name, loaded, taskId, taskIcon, health, maxHealth, favorability,
                 favorLevel, experience, homeMode, sitting, sleeping, fighting, hasBackpack,
                 backpackIcon, backpackName, modelId, ysmModel, dimension, x, y, z, chunkX, chunkZ,
-                foxdreamStage, acquiredAt, seconds);
+                foxdreamStage, acquiredAt, seconds, foxStats);
     }
 
     /**
      * 语义化状态，供界面显示。
      *
-     * <p>优先级：睡觉 > 战斗 > 坐下 > 驻守 > 自由。睡觉排最前，因为
-     * {@code LivingEntity#isSleeping()} 是基于 {@code getSleepingPos()} 的硬状态，
-     * 而 {@code EntityMaid#startSleeping} 会在上床时真正写入它。</p>
+     * <p>优先级：睡觉 &gt; 坐下（待机中） &gt; 战斗 &gt; 驻守 &gt; 自由。</p>
+     *
+     * <p>「坐下」排到战斗之前，是因为玩家可以用右键让正在战斗的女仆坐下；
+     * 此时她已经不攻击了，再显示「战斗中」会误导玩家。</p>
      */
     public Status status() {
         if (!loaded) {
@@ -75,16 +78,21 @@ public record MaidEntry(
         if (sleeping) {
             return Status.SLEEPING;
         }
-        if (fighting) {
-            return Status.FIGHTING;
-        }
         if (sitting) {
             return Status.SITTING;
+        }
+        if (fighting) {
+            return Status.FIGHTING;
         }
         if (homeMode) {
             return Status.GUARDING;
         }
         return Status.FREE;
+    }
+
+    /** 坐下待机，但身上还挂着攻击目标（用于提示玩家她仍在吸引仇恨）。 */
+    public boolean sittingWithAggro() {
+        return loaded && sitting && fighting;
     }
 
     public float healthRatio() {
@@ -122,6 +130,10 @@ public record MaidEntry(
         buf.writeVarInt(foxdreamStage);
         buf.writeLong(acquiredAt);
         buf.writeVarInt(ageSeconds);
+        buf.writeBoolean(foxStats != null);
+        if (foxStats != null) {
+            foxStats.write(buf);
+        }
     }
 
     public static MaidEntry read(RegistryFriendlyByteBuf buf) {
@@ -153,11 +165,12 @@ public record MaidEntry(
         int foxdreamStage = buf.readVarInt();
         long acquiredAt = buf.readLong();
         int ageSeconds = buf.readVarInt();
+        FoxStats foxStats = buf.readBoolean() ? FoxStats.read(buf) : null;
 
         return new MaidEntry(uuid, name, loaded, taskId, taskIcon, health, maxHealth,
                 favorability, favorLevel, experience, homeMode, sitting, sleeping, fighting,
                 hasBackpack, backpackIcon, backpackName, modelId, ysmModel,
-                dimension, x, y, z, chunkX, chunkZ, foxdreamStage, acquiredAt, ageSeconds);
+                dimension, x, y, z, chunkX, chunkZ, foxdreamStage, acquiredAt, ageSeconds, foxStats);
     }
 
     /** 女仆当前状态。 */

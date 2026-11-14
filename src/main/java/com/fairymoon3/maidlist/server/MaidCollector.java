@@ -173,7 +173,8 @@ public final class MaidCollector {
                 pos.getZ() >> 4,
                 FoxdreamCompat.stage(maid),
                 acquiredAt,
-                0
+                0,
+                FoxdreamCompat.stats(maid)
         );
     }
 
@@ -202,7 +203,7 @@ public final class MaidCollector {
                 false,
                 dim,
                 0.0D, 0.0D, 0.0D,
-                pos.getX(), pos.getZ(), FoxdreamCompat.STAGE_NONE, info.getTimestamp(), 0
+                pos.getX(), pos.getZ(), FoxdreamCompat.STAGE_NONE, info.getTimestamp(), 0, null
         );
     }
 
@@ -252,9 +253,59 @@ public final class MaidCollector {
         return true;
     }
 
+    /**
+     * 远程切换女仆的坐下 / 站立状态。
+     *
+     * <p>用车万女仆自己的 {@code EntityMaid#setInSittingPose(boolean)}，
+     * 它内部同时处理姿势与 {@code orderedToSit}，等价于玩家右键让她坐下。</p>
+     */
+    public static void toggleSitting(ServerPlayer player, UUID maidId) {
+        if (maidId == null || throttled(player, "sit", 20)) {
+            return;
+        }
+        List<? extends EntityMaid> found = player.serverLevel().getEntities(EntityMaid.TYPE,
+                maid -> maidId.equals(maid.getUUID()) && maid.isOwnedBy(player) && maid.isAlive());
+        if (found.isEmpty()) {
+            displayFeedback(player, "fairymoon3_maid_list.sit.notfound");
+            return;
+        }
+        EntityMaid maid = found.get(0);
+        boolean sitting = maid.isMaidInSittingPose();
+        boolean next = !sitting;
+        try {
+            maid.setInSittingPose(next);
+            if (next) {
+                maid.getNavigation().stop();
+            }
+        } catch (Exception e) {
+            MaidList.LOGGER.warn("[女仆名单] 切换坐下状态失败", e);            return;
+        }
+        player.sendSystemMessage(Component.translatable(
+                next ? "fairymoon3_maid_list.sit.done.sit" : "fairymoon3_maid_list.sit.done.stand",
+                maid.getName().getString()));
+        sendPanel(player);
+    }
+
     /** 聊天框提示（左下角），保证玩家能看到失败原因。 */
     private static void displayFeedback(ServerPlayer player, String key, Object... args) {
         player.sendSystemMessage(Component.translatable(key, args));
+    }
+
+    /** 服务端冷却（tick），防止客户端被绕过时刷包。 */
+    private static boolean throttled(ServerPlayer player, String kind, int ticks) {
+        try {
+            var data = player.getPersistentData();
+            String tag = "MaidListCd_" + kind;
+            long now = player.serverLevel().getGameTime();
+            long last = data.getLong(tag);
+            if (last != 0L && now - last < ticks) {
+                return true;
+            }
+            data.putLong(tag, now);
+            return false;
+        } catch (Exception e) {
+            return false;
+        }
     }
 
     /**

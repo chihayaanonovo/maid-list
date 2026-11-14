@@ -36,7 +36,7 @@ public class CareScreenDistanceMixin {
             ),
             remap = false)
     private double maidList$removeCareRange(LocalPlayer player, Entity entity) {
-        if (!PanelConfig.REMOTE_MAID_CONTAINER.get()) {
+        if (!PanelConfig.remoteMaidContainer()) {
             return player.distanceToSqr(entity);
         }
         if (LOGGED.compareAndSet(false, true)) {
@@ -61,7 +61,7 @@ public class CareScreenDistanceMixin {
             remap = false)
     private Entity maidList$keepAliveWithoutEntity(ClientLevel level, int entityId) {
         Entity entity = level.getEntity(entityId);
-        if (entity != null || !PanelConfig.REMOTE_MAID_CONTAINER.get()) {
+        if (entity != null || !PanelConfig.remoteMaidContainer()) {
             return entity;
         }
         return Minecraft.getInstance().player;
