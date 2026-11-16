@@ -34,10 +34,32 @@ public final class ModNetwork {
                 ModNetwork::handleSummonAll);
         registrar.playToServer(MaidSitTogglePayload.TYPE, MaidSitTogglePayload.STREAM_CODEC,
                 ModNetwork::handleSitToggle);
+        registrar.playToServer(MaidStorePayload.TYPE, MaidStorePayload.STREAM_CODEC,
+                ModNetwork::handleStore);
+        registrar.playToServer(MaidReleasePayload.TYPE, MaidReleasePayload.STREAM_CODEC,
+                ModNetwork::handleRelease);
+        registrar.playToServer(MaidReleaseAllPayload.TYPE, MaidReleaseAllPayload.STREAM_CODEC,
+                ModNetwork::handleReleaseAll);
+        registrar.playToServer(MaidStorageRequestPayload.TYPE, MaidStorageRequestPayload.STREAM_CODEC,
+                ModNetwork::handleStorageRequest);
+        registrar.playToServer(MaidRestorePayload.TYPE, MaidRestorePayload.STREAM_CODEC,
+                ModNetwork::handleRestore);
+        registrar.playToServer(MaidAttackRequestPayload.TYPE, MaidAttackRequestPayload.STREAM_CODEC,
+                ModNetwork::handleAttackRequest);
+        registrar.playToServer(MaidAttackSetPayload.TYPE, MaidAttackSetPayload.STREAM_CODEC,
+                ModNetwork::handleAttackSet);
+        registrar.playToServer(MaidAttackReplacePayload.TYPE, MaidAttackReplacePayload.STREAM_CODEC,
+                ModNetwork::handleAttackReplace);
+        registrar.playToServer(MaidAttackGlobalPayload.TYPE, MaidAttackGlobalPayload.STREAM_CODEC,
+                ModNetwork::handleAttackGlobal);
 
         // 服务端 -> 客户端
         registrar.playToClient(MaidListPayload.TYPE, MaidListPayload.STREAM_CODEC,
                 ModNetwork::handleList);
+        registrar.playToClient(MaidStoragePayload.TYPE, MaidStoragePayload.STREAM_CODEC,
+                ModNetwork::handleStorage);
+        registrar.playToClient(MaidAttackListPayload.TYPE, MaidAttackListPayload.STREAM_CODEC,
+                ModNetwork::handleAttackList);
     }
 
     /** 服务端：收到请求后收集名册并回传。 */
@@ -99,6 +121,112 @@ public final class ModNetwork {
         context.enqueueWork(() -> {
             if (context.player() instanceof ServerPlayer serverPlayer) {
                 MaidCollector.toggleSitting(serverPlayer, payload.maidId());
+            }
+        });
+    }
+
+    /** 服务端：收纳一只女仆。 */
+    private static void handleStore(MaidStorePayload payload, IPayloadContext context) {
+        context.enqueueWork(() -> {
+            if (context.player() instanceof ServerPlayer serverPlayer) {
+                com.fairymoon3.maidlist.server.MaidStorage.store(serverPlayer, payload.maidId());
+            }
+        });
+    }
+
+    /** 服务端：释放一只女仆。 */
+    private static void handleRelease(MaidReleasePayload payload, IPayloadContext context) {
+        context.enqueueWork(() -> {
+            if (context.player() instanceof ServerPlayer serverPlayer) {
+                com.fairymoon3.maidlist.server.MaidStorage.release(serverPlayer, payload.maidId());
+            }
+        });
+    }
+
+    /** 服务端：全部释放。 */
+    private static void handleReleaseAll(MaidReleaseAllPayload payload, IPayloadContext context) {
+        context.enqueueWork(() -> {
+            if (context.player() instanceof ServerPlayer serverPlayer) {
+                com.fairymoon3.maidlist.server.MaidStorage.releaseAll(serverPlayer);
+            }
+        });
+    }
+
+    /** 服务端：回传收纳空间列表。 */
+    private static void handleStorageRequest(MaidStorageRequestPayload payload, IPayloadContext context) {
+        context.enqueueWork(() -> {
+            if (context.player() instanceof ServerPlayer serverPlayer) {
+                com.fairymoon3.maidlist.server.MaidStorage.sendStorage(serverPlayer);
+            }
+        });
+    }
+
+    /** 服务端：回传某只女仆的仇恨名单。 */
+    private static void handleAttackRequest(MaidAttackRequestPayload payload, IPayloadContext context) {
+        context.enqueueWork(() -> {
+            if (context.player() instanceof ServerPlayer serverPlayer) {
+                com.fairymoon3.maidlist.server.MaidAttackList.send(serverPlayer, payload.maidId());
+            }
+        });
+    }
+
+    /** 服务端：修改名单里的单个实体状态。 */
+    private static void handleAttackSet(MaidAttackSetPayload payload, IPayloadContext context) {
+        context.enqueueWork(() -> {
+            if (context.player() instanceof ServerPlayer serverPlayer) {
+                com.fairymoon3.maidlist.server.MaidAttackList.setOne(
+                        serverPlayer, payload.maidId(), payload.entityType(), payload.mode());
+            }
+        });
+    }
+
+    /** 服务端：整体替换名单（重置 / 粘贴）。 */
+    private static void handleAttackReplace(MaidAttackReplacePayload payload, IPayloadContext context) {
+        context.enqueueWork(() -> {
+            if (context.player() instanceof ServerPlayer serverPlayer) {
+                com.fairymoon3.maidlist.server.MaidAttackList.replace(
+                        serverPlayer, payload.maidId(), payload.entries());
+            }
+        });
+    }
+
+    /** 服务端：批量同步 / 重置所有女仆。 */
+    private static void handleAttackGlobal(MaidAttackGlobalPayload payload, IPayloadContext context) {
+        context.enqueueWork(() -> {
+            if (context.player() instanceof ServerPlayer serverPlayer) {
+                if (payload.action() == MaidAttackGlobalPayload.ACTION_RESET_ALL) {
+                    com.fairymoon3.maidlist.server.MaidAttackList.resetAll(serverPlayer, payload.maidId());
+                } else {
+                    com.fairymoon3.maidlist.server.MaidAttackList.syncToAll(
+                            serverPlayer, payload.maidId(), payload.entries());
+                }
+            }
+        });
+    }
+
+    /** 客户端：收到仇恨名单。 */
+    private static void handleAttackList(MaidAttackListPayload payload, IPayloadContext context) {
+        context.enqueueWork(() -> {
+            if (FMLEnvironment.dist.isClient()) {
+                com.fairymoon3.maidlist.client.ClientMaidAttackData.handle(payload);
+            }
+        });
+    }
+
+    /** 服务端：用本地备份恢复一只女仆（会校验来源）。 */
+    private static void handleRestore(MaidRestorePayload payload, IPayloadContext context) {
+        context.enqueueWork(() -> {
+            if (context.player() instanceof ServerPlayer serverPlayer) {
+                com.fairymoon3.maidlist.server.MaidStorage.restore(serverPlayer, payload.name(), payload.tag());
+            }
+        });
+    }
+
+    /** 客户端：刷新收纳空间界面。 */
+    private static void handleStorage(MaidStoragePayload payload, IPayloadContext context) {
+        context.enqueueWork(() -> {
+            if (FMLEnvironment.dist.isClient()) {
+                com.fairymoon3.maidlist.client.ClientMaidStorage.handle(payload);
             }
         });
     }

@@ -30,8 +30,10 @@ public final class PanelConfig {
     public static final boolean DEFAULT_REMOTE_MAID_CONTAINER = true;
     /** 忽略视线要求的默认值。 */
     public static final boolean DEFAULT_IGNORE_LINE_OF_SIGHT = true;
-    /** 夜间主题的默认值。 */
-    public static final boolean DEFAULT_DARK_THEME = false;
+    /** 主题默认值。 */
+    public static final ThemeMode DEFAULT_THEME = ThemeMode.GLASS;
+    /** 是否使用游戏默认字体（跟随材质包）而不是模组内置字体。 */
+    public static final boolean DEFAULT_VANILLA_FONT = false;
 
     /**
      * 远程管理总开关。
@@ -49,8 +51,11 @@ public final class PanelConfig {
     /** 狐梦 HUD 动作包是否忽略“视线”要求。 */
     public static final ModConfigSpec.BooleanValue IGNORE_FOXDREAM_LINE_OF_SIGHT;
 
-    /** 界面主题：false = 米白（白天），true = 深色（夜间）。 */
-    public static final ModConfigSpec.BooleanValue DARK_THEME;
+    /** 界面主题（日间 / 夜间 / 半透明），用标题栏的太阳 / 月亮 / 玻璃按钮循环切换。 */
+    public static final ModConfigSpec.EnumValue<ThemeMode> THEME;
+
+    /** 是否使用游戏默认字体（会跟随材质包），false = 用模组内置字体。 */
+    public static final ModConfigSpec.BooleanValue USE_VANILLA_FONT;
 
     /** 服务端侧的远程管理开关。 */
     public static final ModConfigSpec.BooleanValue SERVER_REMOTE_MAID_CONTAINER;
@@ -74,10 +79,14 @@ public final class PanelConfig {
         builder.pop();
 
         builder.push("ui");
-        DARK_THEME = builder
-                .comment("界面主题：false = 米白（白天），true = 深色（夜间）。可在面板里点太阳/月亮切换。",
-                        "false = light (cream) theme, true = dark theme.")
-                .define("dark_theme", DEFAULT_DARK_THEME);
+        THEME = builder
+                .comment("界面主题：light = 米白（日间），dark = 深色（夜间），glass = 整体半透明。",
+                        "Panel theme: light / dark / glass. Cycle it with the sun / moon / glass button.")
+                .defineEnum("theme", DEFAULT_THEME);
+        USE_VANILLA_FONT = builder
+                .comment("是否使用游戏默认字体（会跟随材质包变化）。点面板标题栏的版本号可切换。",
+                        "Use the game default font (follows resource packs) instead of the bundled font.")
+                .define("use_vanilla_font", DEFAULT_VANILLA_FONT);
         builder.pop();
 
         CLIENT_SPEC = builder.build();
@@ -137,22 +146,40 @@ public final class PanelConfig {
         return server != null ? server : DEFAULT_IGNORE_LINE_OF_SIGHT;
     }
 
-    /** 当前是否夜间主题。 */
-    public static boolean darkTheme() {
+    /** 当前界面主题。 */
+    public static ThemeMode themeMode() {
         try {
-            return DARK_THEME.get();
+            ThemeMode mode = THEME.get();
+            return mode == null ? DEFAULT_THEME : mode;
         } catch (Throwable t) {
-            return DEFAULT_DARK_THEME;
+            return DEFAULT_THEME;
         }
     }
 
-    /** 切换夜间主题；配置不可写时只影响本次界面。 */
-    public static boolean toggleDarkTheme() {
-        boolean next = !darkTheme();
+    /** 当前是否使用游戏默认字体。 */
+    public static boolean useVanillaFont() {
+        Boolean value = read(USE_VANILLA_FONT);
+        return value != null ? value : DEFAULT_VANILLA_FONT;
+    }
+
+    /** 切换字体设置并返回切换后的值。 */
+    public static boolean toggleVanillaFont() {
+        boolean next = !useVanillaFont();
         try {
-            DARK_THEME.set(next);
+            USE_VANILLA_FONT.set(next);
         } catch (Throwable ignored) {
-            // 配置未加载：至少让本次界面切过去
+            // 配置未加载
+        }
+        return next;
+    }
+
+    /** 轮换到下一个主题并返回它；配置不可写时本次界面照样切换。 */
+    public static ThemeMode cycleTheme() {
+        ThemeMode next = themeMode().next();
+        try {
+            THEME.set(next);
+        } catch (Throwable ignored) {
+            // 配置未加载：只影响本次界面
         }
         return next;
     }

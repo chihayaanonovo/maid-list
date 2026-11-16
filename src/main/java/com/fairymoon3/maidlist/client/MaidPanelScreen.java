@@ -8,6 +8,7 @@ import com.fairymoon3.maidlist.network.MaidFoxdreamPayload;
 import com.fairymoon3.maidlist.network.MaidListRequestPayload;
 import com.fairymoon3.maidlist.network.MaidOpenGuiPayload;
 import com.fairymoon3.maidlist.network.MaidSitTogglePayload;
+import com.fairymoon3.maidlist.network.MaidStorePayload;
 import com.fairymoon3.maidlist.network.MaidSummonAllPayload;
 import com.fairymoon3.maidlist.network.MaidTeleportPayload;
 import com.fairymoon3.maidlist.network.MaidTeleportToPayload;
@@ -82,11 +83,15 @@ public class MaidPanelScreen extends Screen {
             ResourceLocation.fromNamespaceAndPath("fairymoon3_maid_list", "panel");
 
     private static Component panelStyle(Component text) {
-        return text.copy().withStyle(style -> style.withFont(PANEL_FONT));
+        MutableComponent copy = text.copy();
+        if (PanelConfig.useVanillaFont()) {
+            return copy;
+        }
+        return copy.withStyle(style -> style.withFont(PANEL_FONT));
     }
 
     private static Component panelStyle(String text) {
-        return Component.literal(text).withStyle(style -> style.withFont(PANEL_FONT));
+        return panelStyle(Component.literal(text));
     }
 
     private int panelWidth(String text) {
@@ -128,7 +133,10 @@ public class MaidPanelScreen extends Screen {
 
     // ---------------------------------------------------------------- 配色（白天 / 夜间可切换）
     /** 当前是否为夜间（深色）主题，来自客户端配置。 */
-    private boolean darkMode;
+    private com.fairymoon3.maidlist.config.ThemeMode currentTheme = com.fairymoon3.maidlist.config.ThemeMode.GLASS;
+    /** 面板外世界压暗强度，半透明主题下让世界更清楚。 */
+    private int worldDim;
+
     private int cPanel;
     private int cBorder;
     private int cHeader;
@@ -158,6 +166,7 @@ public class MaidPanelScreen extends Screen {
 
     /** 米白（白天）配色。 */
     private void applyLightTheme() {
+        worldDim = 0x77000000;
         cPanel = 0xF7FBF6EC;
         cBorder = 0xFFD6C5A9;
         cHeader = 0xFFF2E8D6;
@@ -185,6 +194,7 @@ public class MaidPanelScreen extends Screen {
 
     /** 深色（夜间）配色：沿用 v0.1 的黑色面板。 */
     private void applyDarkTheme() {
+        worldDim = 0x77000000;
         cPanel = 0xF01A1D24;
         cBorder = 0xFF343B4A;
         cHeader = 0xFF20242D;
@@ -210,13 +220,48 @@ public class MaidPanelScreen extends Screen {
         cDimText = 0xFFFFAA00;
     }
 
+    /**
+     * 整体半透明（玻璃）主题。
+     *
+     * <p>面板与列表都带明显 alpha，能透出后面的世界；文字用近白色，
+     * 边框用暖金，保证在任意背景上都能看清。</p>
+     */
+    private void applyGlassTheme() {
+        // 更透：面板约 40%、列表约 22%，能明显看到后面的世界
+        worldDim = 0x40000000;
+        cPanel = 0x661A1D24;
+        // 外围边框用纯白
+        cBorder = 0xFFFFFFFF;
+        cHeader = 0x5512151B;
+        cAccent = 0xFFFFC96B;
+        cText = 0xFFF7F4EE;
+        cSub = 0xFFD9D3C8;
+        cDim = 0xFFB3ACA0;
+        cListBg = 0x3814171D;
+        cSearchBg = 0x4D101418;
+        cRowHover = 0x2AFFFFFF;
+        cRowAltA = 0x14FFFFFF;
+        cRowAltB = 0x0AFFFFFF;
+        cRowSelected = 0x44FFC96B;
+        cBtnBg = 0x66181C24;
+        cBtnBorder = 0xCCFFFFFF;
+        cAvatarBg = 0x66181B22;
+        cHealthBg = 0x66FFFFFF;
+        cCoolMask = 0xAA000000;
+        cHiLine = 0xFFFFE9A3;
+        cHp = 0xFF7BE07B;
+        cFavor = 0xFFFF8B8B;
+        cPos = 0xFFFFE082;
+        cDimText = 0xFFFFC178;
+    }
+
     /** 按配置刷新调色板；搜索框颜色也跟着主题走。 */
     private void applyTheme() {
-        this.darkMode = PanelConfig.darkTheme();
-        if (this.darkMode) {
-            applyDarkTheme();
-        } else {
-            applyLightTheme();
+        this.currentTheme = PanelConfig.themeMode();
+        switch (this.currentTheme) {
+            case DARK -> applyDarkTheme();
+            case GLASS -> applyGlassTheme();
+            default -> applyLightTheme();
         }
         if (this.searchBox != null) {
             this.searchBox.setTextColor(cText);
@@ -238,6 +283,19 @@ public class MaidPanelScreen extends Screen {
     private boolean hoveredSummonAll;
     private boolean hoveredTheme;
     private MaidEntry hoveredMute;
+    private MaidEntry hoveredStore;
+    private boolean hoveredShrine;
+
+    /** 右上角关闭按钮的边长。 */
+    private static final int CLOSE_SIZE = 11;
+    /** 版本号文字的可点击区域 {x, y, w, h}，用于切换字体。 */
+    private int[] versionRect;
+
+    /** 右键列表弹出的操作菜单（宽度按文本自适应）。 */
+    private static final int MENU_H = 18;
+    private MaidEntry contextMenuEntry;
+    private int contextMenuX;
+    private int contextMenuY;
 
     /** 主题切换按钮的冷却（0.5 秒）。 */
     private static final long THEME_COOLDOWN_MS = 500L;
@@ -350,9 +408,14 @@ public class MaidPanelScreen extends Screen {
         return guiButtonX() - TP_SIZE - 3;
     }
 
+    /** 收纳按钮（最左侧，用神龛图标）。 */
+    private int storeButtonX() {
+        return foxButtonX() - TP_SIZE - 3;
+    }
+
     /** 一行里文字可用的右边界（跟着按钮布局走）。 */
     private int rowContentRight(MaidEntry entry) {
-        return (hasFoxdream(entry) ? foxButtonX() : guiButtonX()) - 6;
+        return storeButtonX() - 6;
     }
 
     private int listHeight() {
@@ -565,13 +628,15 @@ public class MaidPanelScreen extends Screen {
     @Override
     public void render(GuiGraphics graphics, int mouseX, int mouseY, float partialTick) {
         // 只压暗世界，不做模糊（模糊会把面板一起糊掉）
-        graphics.fill(0, 0, this.width, this.height, 0x77000000);
+        graphics.fill(0, 0, this.width, this.height, this.worldDim);
 
         applyTheme();
         refreshClientMaids();
         this.hoveredSummonAll = false;
         this.hoveredTheme = false;
         this.hoveredMute = null;
+        this.hoveredStore = null;
+        this.hoveredShrine = false;
         int left = panelLeft();
         int top = panelTop();
         int right = left + PANEL_W;
@@ -602,10 +667,16 @@ public class MaidPanelScreen extends Screen {
         panelText(graphics, title, titleX, textY, cText, false);
         String version = modVersion();
         if (!version.isEmpty()) {
-            panelText(graphics, "v" + version, titleX + panelWidth(title) + 6, textY, cDim, false);
+            String versionText = "v" + version;
+            int versionX = titleX + panelWidth(title) + 6;
+            int versionW = panelWidth(versionText);
+            this.versionRect = new int[]{versionX, textY, versionW, 9};
+            panelText(graphics, versionText, versionX, textY, cDim, false);
+        } else {
+            this.versionRect = null;
         }
         String count = Component.translatable("fairymoon3_maid_list.count", this.entries.size()).getString();
-        int countX = right - 12 - panelWidth(count);
+        int countX = closeButtonX() - 8 - panelWidth(count);
 
         // 计数左侧：一键召唤所有能传送的女仆
         int allBtn = 16;
@@ -626,7 +697,21 @@ public class MaidPanelScreen extends Screen {
             this.hoveredTheme = true;
         }
         drawThemeButton(graphics, themeX, allY, themeBtn, themeHovered);
+        if (isOverShrine(mouseX, mouseY)) {
+            this.hoveredShrine = true;
+        }
         drawCooldownOverlay(graphics, themeX, allY, themeBtn, themeBtn, this.cdThemeUntil, THEME_COOLDOWN_MS);
+
+        // 右上角关闭按钮
+        int closeX = closeButtonX();
+        int closeY = closeButtonY();
+        boolean closeHovered = inRect(mouseX, mouseY, closeX, closeY, CLOSE_SIZE);
+        int closeColor = closeHovered ? cAccent : cSub;
+        for (int i = 0; i < CLOSE_SIZE - 3; i++) {
+            graphics.fill(closeX + 2 + i, closeY + 2 + i, closeX + 3 + i, closeY + 3 + i, closeColor);
+            graphics.fill(closeX + CLOSE_SIZE - 3 - i, closeY + 2 + i,
+                    closeX + CLOSE_SIZE - 2 - i, closeY + 3 + i, closeColor);
+        }
 
         panelText(graphics, count, countX, textY, cAccent, false);
 
@@ -651,8 +736,15 @@ public class MaidPanelScreen extends Screen {
 
         super.render(graphics, mouseX, mouseY, partialTick);
 
+
         // 按钮的浮层提示放在最后画，避免被列表裁剪
-        if (this.hoveredMute != null) {
+        if (this.hoveredShrine) {
+            panelTooltip(graphics, Component.translatable("fairymoon3_maid_list.storage.tooltip.shrine"),
+                    mouseX, mouseY);
+        } else if (this.hoveredStore != null) {
+            panelTooltip(graphics, Component.translatable("fairymoon3_maid_list.storage.store.tooltip"),
+                    mouseX, mouseY);
+        } else if (this.hoveredMute != null) {
             panelTooltip(graphics, Component.translatable(MaidMuteStore.isMuted(this.hoveredMute.uuid())
                     ? "fairymoon3_maid_list.voice.unmute"
                     : "fairymoon3_maid_list.voice.mute"), mouseX, mouseY);
@@ -680,6 +772,9 @@ public class MaidPanelScreen extends Screen {
         }
     
         drawStars(graphics);
+
+        // 右键菜单最后画：盖住列表按钮、搜索框、刷新按钮等一切内容
+        drawContextMenu(graphics, mouseX, mouseY);
     }
 
     // ------------------------------------------------------------------ 左上角神龛互动
@@ -751,6 +846,67 @@ public class MaidPanelScreen extends Screen {
             graphics.fill(ix, iy - 2, ix + 1, iy + 3, color);
             graphics.fill(ix - 2, iy, ix + 3, iy + 1, color);
         }
+    }
+
+    /** 菜单宽度：跟随当前语言的实际文本，避免右侧一大片空白。 */
+    private int contextMenuWidth() {
+        return panelWidth(Component.translatable("fairymoon3_maid_list.attack.menu.entry")) + 16;
+    }
+
+    /** 右键菜单：目前只有一个入口 —— 打开这只女仆的仇恨名单。 */
+    /** 右键菜单的位置：跟随鼠标，超出屏幕时自动夹回来。 */
+    private int[] contextMenuRect() {
+        if (this.contextMenuEntry == null) {
+            return null;
+        }
+        int w = contextMenuWidth();
+        int x = Math.max(4, Math.min(this.contextMenuX, this.width - w - 4));
+        int y = Math.max(4, Math.min(this.contextMenuY, this.height - MENU_H - 4));
+        this.contextMenuX = x;
+        this.contextMenuY = y;
+        return new int[]{x, y, w, MENU_H};
+    }
+
+    private void drawContextMenu(GuiGraphics graphics, int mouseX, int mouseY) {
+        int[] rect = contextMenuRect();
+        if (rect == null) {
+            return;
+        }
+        int x = rect[0];
+        int y = rect[1];
+        int w = rect[2];
+
+        // GUI 的 z 越大越靠近镜头；物品 / 实体渲染会把 z 抬到 100~200，
+        // 所以这里把菜单抬到 400，才能真正压在 3D 内容（头像、物品图标）之上。
+        var pose = graphics.pose();
+        pose.pushPose();
+        pose.translate(0.0F, 0.0F, 400.0F);
+
+        boolean hovered = inRect(mouseX, mouseY, x, y, w, MENU_H);
+        boolean glass = this.currentTheme == com.fairymoon3.maidlist.config.ThemeMode.GLASS;
+
+        // 底：玻璃主题用 60% 的深色（真半透明），其它主题用各自的面板底色
+        int menuBg = glass ? ((cPanel & 0x00FFFFFF) | 0x99000000) : cPanel;
+        // 边框：玻璃主题用 60% 白，不要用纯白整块，否则会透过底色把菜单顶成白灰
+        int menuBorder = glass ? 0x99FFFFFF : cBorder;
+
+        graphics.fill(x + 2, y + 2, x + w + 3, y + MENU_H + 3, 0x55000000);
+        // 先铺底
+        graphics.fill(x, y, x + w, y + MENU_H, menuBg);
+        if (hovered) {
+            graphics.fill(x, y, x + w, y + MENU_H, cRowHover);
+        }
+        // 再画四条 1px 边框线（只在边缘，不会垫在底色下面）
+        graphics.fill(x, y, x + w, y + 1, menuBorder);
+        graphics.fill(x, y + MENU_H - 1, x + w, y + MENU_H, menuBorder);
+        graphics.fill(x, y, x + 1, y + MENU_H, menuBorder);
+        graphics.fill(x + w - 1, y, x + w, y + MENU_H, menuBorder);
+        // 顶部高光
+        graphics.fill(x + 1, y + 1, x + w - 1, y + 2, glass ? 0x55FFFFFF : 0x33FFFFFF);
+        panelText(graphics, Component.translatable("fairymoon3_maid_list.attack.menu.entry"),
+                x + 7, y + 5, hovered ? cAccent : cText, false);
+
+        pose.popPose();
     }
 
     private void drawList(GuiGraphics graphics, int mouseX, int mouseY) {
@@ -861,10 +1017,15 @@ public class MaidPanelScreen extends Screen {
         int goX = goButtonX();
         int guiX = guiButtonX();
         int foxX = foxButtonX();
+        int storeX = storeButtonX();
         boolean tpHovered = inRect(mouseX, mouseY, tpX, btnY, TP_SIZE);
         boolean goHovered = inRect(mouseX, mouseY, goX, btnY, TP_SIZE);
         boolean guiHovered = inRect(mouseX, mouseY, guiX, btnY, TP_SIZE);
         boolean foxHovered = foxAvailable && inRect(mouseX, mouseY, foxX, btnY, TP_SIZE);
+        boolean storeHovered = inRect(mouseX, mouseY, storeX, btnY, TP_SIZE);
+        if (storeHovered) {
+            this.hoveredStore = entry;
+        }
         if (tpHovered) {
             this.hoveredTp = entry;
         }
@@ -934,7 +1095,8 @@ public class MaidPanelScreen extends Screen {
             graphics.fill(healthX, y + 19, healthX + healthW, y + 22, cBtnBg);
         }
 
-        // 按钮：狐梦手册 / 女仆背包 / 前往她身边 / 召唤到身边
+        // 按钮：收纳 / 狐梦手册 / 女仆背包 / 前往她身边 / 召唤到身边
+        drawIconButton(graphics, storeX, btnY, TP_SIZE, storeHovered, 0xFFC9A227, ICON_SHRINE);
         if (foxAvailable) {
             drawIconButton(graphics, foxX, btnY, TP_SIZE, foxHovered, C_FOX, ICON_FOX);
         }
@@ -1127,19 +1289,34 @@ public class MaidPanelScreen extends Screen {
         }
         int cx = x + size / 2;
         int cy = y + size / 2;
-        if (this.darkMode) {
-            // 月亮：圆盘 + 用表头底色挖出月牙
-            int moon = 0xFFE8ECF7;
-            fillDisc(graphics, cx, cy, 5, moon);
-            fillDisc(graphics, cx + 3, cy - 2, 5, cHeader);
-        } else {
-            // 太阳：圆盘 + 四向光芒
-            int sun = 0xFFE0952B;
-            fillDisc(graphics, cx, cy, 4, sun);
-            graphics.fill(cx, cy - 8, cx + 1, cy - 6, sun);
-            graphics.fill(cx, cy + 6, cx + 1, cy + 8, sun);
-            graphics.fill(cx - 8, cy, cx - 6, cy + 1, sun);
-            graphics.fill(cx + 6, cy, cx + 8, cy + 1, sun);
+        switch (this.currentTheme) {
+            case DARK -> {
+                // 月亮：圆盘 + 用表头底色挖出月牙
+                int moon = 0xFFE8ECF7;
+                fillDisc(graphics, cx, cy, 5, moon);
+                // 挖空必须不透明，否则玻璃主题下挖不干净
+                fillDisc(graphics, cx + 3, cy - 2, 5, cHeader | 0xFF000000);
+            }
+            case GLASS -> {
+                // 玻璃：半透明方块 + 斜向高光
+                int frame = 0xFF9FD8E8;
+                graphics.fill(cx - 5, cy - 5, cx + 5, cy - 4, frame);
+                graphics.fill(cx - 5, cy + 4, cx + 5, cy + 5, frame);
+                graphics.fill(cx - 5, cy - 5, cx - 4, cy + 5, frame);
+                graphics.fill(cx + 4, cy - 5, cx + 5, cy + 5, frame);
+                graphics.fill(cx - 3, cy - 3, cx + 3, cy + 3, 0x66FFFFFF);
+                graphics.fill(cx - 3, cy + 1, cx + 1, cy + 2, 0xCCFFFFFF);
+                graphics.fill(cx - 2, cy, cx - 1, cy + 1, 0xCCFFFFFF);
+            }
+            default -> {
+                // 太阳：圆盘 + 四向光芒
+                int sun = 0xFFE0952B;
+                fillDisc(graphics, cx, cy, 4, sun);
+                graphics.fill(cx, cy - 8, cx + 1, cy - 6, sun);
+                graphics.fill(cx, cy + 6, cx + 1, cy + 8, sun);
+                graphics.fill(cx - 8, cy, cx - 6, cy + 1, sun);
+                graphics.fill(cx + 6, cy, cx + 8, cy + 1, sun);
+            }
         }
     }
 
@@ -1442,6 +1619,14 @@ public class MaidPanelScreen extends Screen {
         return inRect(mouseX, mouseY, goButtonX(), top + 9, TP_SIZE);
     }
 
+    private boolean isOverStoreButton(MaidEntry entry, double mouseX, double mouseY) {
+        int top = rowTopOf(entry);
+        if (top == Integer.MIN_VALUE) {
+            return false;
+        }
+        return inRect(mouseX, mouseY, storeButtonX(), top + 9, TP_SIZE);
+    }
+
     private boolean isOverFoxButton(MaidEntry entry, double mouseX, double mouseY) {
         if (!hasFoxdream(entry)) {
             return false;
@@ -1453,10 +1638,19 @@ public class MaidPanelScreen extends Screen {
         return inRect(mouseX, mouseY, foxButtonX(), top + 9, TP_SIZE);
     }
 
+    /** 右上角关闭按钮的 X。 */
+    private int closeButtonX() {
+        return panelLeft() + PANEL_W - 4 - CLOSE_SIZE;
+    }
+
+    private int closeButtonY() {
+        return panelTop() + 6;
+    }
+
     /** 标题栏「全部召唤」按钮的 X。 */
     private int summonAllButtonX() {
         String count = Component.translatable("fairymoon3_maid_list.count", this.entries.size()).getString();
-        return panelLeft() + PANEL_W - 12 - panelWidth(count) - 6 - 16;
+        return closeButtonX() - 8 - panelWidth(count) - 6 - 16;
     }
 
     /** 标题栏「主题切换」按钮的 X。 */
@@ -1488,6 +1682,19 @@ public class MaidPanelScreen extends Screen {
 
     @Override
     public boolean mouseClicked(double mouseX, double mouseY, int button) {
+        if (button == 0 && inRect(mouseX, mouseY, closeButtonX(), closeButtonY(), CLOSE_SIZE)) {
+            this.onClose();
+            return true;
+        }
+        if (button == 0 && this.versionRect != null
+                && inRect(mouseX, mouseY, versionRect[0], versionRect[1], versionRect[2], versionRect[3])) {
+            PanelConfig.toggleVanillaFont();
+            return true;
+        }
+        if (button == 1 && isOverShrine(mouseX, mouseY)) {
+            ClientMaidStorage.requestOpen();
+            return true;
+        }
         if (button == 0 && isOverShrine(mouseX, mouseY)) {
             playMeow();
             spawnStars(mouseX, mouseY);
@@ -1496,7 +1703,7 @@ public class MaidPanelScreen extends Screen {
         if (button == 0 && isOverThemeButton(mouseX, mouseY)) {
             if (!onCooldown(this.cdThemeUntil)) {
                 this.cdThemeUntil = System.currentTimeMillis() + THEME_COOLDOWN_MS;
-                PanelConfig.toggleDarkTheme();
+                this.currentTheme = PanelConfig.cycleTheme();
                 applyTheme();
             }
             return true;
@@ -1508,6 +1715,28 @@ public class MaidPanelScreen extends Screen {
             }
             return true;
         }
+        // 右键列表中的女仆：弹出操作菜单
+        if (button == 1) {
+            MaidEntry hit = rowAt(mouseX, mouseY);
+            if (hit != null) {
+                this.contextMenuEntry = hit;
+                this.contextMenuX = (int) mouseX;
+                this.contextMenuY = (int) mouseY;
+                return true;
+            }
+        }
+        // 左键：处理弹出的菜单
+        if (button == 0 && this.contextMenuEntry != null) {
+            int[] rect = contextMenuRect();
+            boolean inMenu = rect != null
+                    && inRect(mouseX, mouseY, rect[0], rect[1], rect[2], rect[3]);
+            MaidEntry target = this.contextMenuEntry;
+            this.contextMenuEntry = null;
+            if (inMenu) {
+                ClientMaidAttackData.requestOpen(target.uuid());
+            }
+            return true;
+        }
         if (button == 0) {
             MaidEntry hit = rowAt(mouseX, mouseY);
             if (hit != null) {
@@ -1515,6 +1744,10 @@ public class MaidPanelScreen extends Screen {
                 if (rowTop != Integer.MIN_VALUE
                         && inRect(mouseX, mouseY, listLeft() + 5 - 2, rowTop + 5 - 2, 9)) {
                     MaidMuteStore.toggle(hit.uuid());
+                    return true;
+                }
+                if (isOverStoreButton(hit, mouseX, mouseY)) {
+                    PacketDistributor.sendToServer(new MaidStorePayload(hit.uuid()));
                     return true;
                 }
                 if (isOverFoxButton(hit, mouseX, mouseY)) {

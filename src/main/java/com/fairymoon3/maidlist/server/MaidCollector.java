@@ -53,6 +53,15 @@ public final class MaidCollector {
         PacketDistributor.sendToPlayer(player, new MaidListPayload(collect(player)));
     }
 
+    /** 过滤掉已经被玩家收进「收纳空间」的女仆（实体已不存在，但索引里可能还留着）。 */
+    private static void dropStored(ServerPlayer player, List<MaidEntry> entries) {
+        try {
+            entries.removeIf(entry -> MaidStorage.isStored(player, entry.uuid()));
+        } catch (Exception ignored) {
+            // 过滤失败不影响主流程
+        }
+    }
+
     /** 收集该玩家拥有的女仆信息。必须在服务端主线程调用。 */
     public static List<MaidEntry> collect(ServerPlayer player) {
         Map<UUID, MaidEntry> result = new LinkedHashMap<>();
@@ -113,7 +122,9 @@ public final class MaidCollector {
             MaidList.LOGGER.debug("[女仆名单] 合并女仆索引失败", e);
         }
 
-        return new ArrayList<>(result.values());
+        List<MaidEntry> entries = new ArrayList<>(result.values());
+        dropStored(player, entries);
+        return entries;
     }
 
     private static MaidEntry fromEntity(EntityMaid maid, ServerLevel level, long acquiredAt) {
