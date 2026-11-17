@@ -545,26 +545,163 @@ public class MaidPanelScreen extends Screen {
             return tr("fairymoon3_maid_list.default_model");
         }
         return this.modelNameCache.computeIfAbsent(id, key -> {
+            String raw = null;
             try {
                 var info = MaidModels.getInstance().getInfo(key);
                 if (info.isPresent()) {
-                    String raw = info.get().getName();
-                    if (raw != null && !raw.isEmpty()) {
-                        if (raw.startsWith("{") && raw.endsWith("}")) {
-                            String translationKey = raw.substring(1, raw.length() - 1);
-                            if (I18n.exists(translationKey)) {
-                                return I18n.get(translationKey);
-                            }
-                            return key;
-                        }
-                        return raw;
-                    }
+                    raw = info.get().getName();
                 }
             } catch (Throwable ignored) {
                 // 模型包没加载好之类的情况，退回 id
             }
-            return key;
+            String resolved = resolveModelName(key, raw);
+            if (resolved != null) {
+                return resolved;
+            }
+            // 兜底：模型 ID 本身也可能是 model.xxx.name 这种键，先抽出真正的 id 再美化
+            String inner = extractModelId(key);
+            return humanizeModelId(inner == null ? key : inner);
         });
+    }
+
+    /**
+     * 把模型信息里的名字字段解析成可读文本。
+     *
+     * <p>车万女仆的模型名可能是三种形态：</p>
+     * <ul>
+     *   <li>普通文本（直接返回）</li>
+     *   <li>{@code {model.xxx.name}} —— 带花括号的翻译键（旧格式）</li>
+     *   <li>{@code model.xxx.name} —— **裸翻译键**（新格式，之前漏掉了，会直接把键名显示出来）</li>
+     * </ul>
+     *
+     * @return 解析成功返回文本；解析不出来返回 {@code null}，由调用方退回模型 ID
+     */
+    private static String resolveModelName(String modelId, String raw) {
+        String text = raw == null ? "" : raw.trim();
+        if (text.isEmpty()) {
+            return null;
+        }
+        if (text.startsWith("{") && text.endsWith("}") && text.length() > 2) {
+            text = text.substring(1, text.length() - 1).trim();
+        }
+        if (!looksLikeTranslationKey(text)) {
+            return text;
+        }
+
+        // 0) 玩家手动映射表优先
+        String custom = MaidModelNameOverrides.lookup(text, extractModelId(text), modelId);
+        if (custom != null) {
+            return custom;
+        }
+
+        // 0.5) 模型包自带的 .lang（旧格式，MC 不会加载，我们自己解析）
+        String fromPack = MaidModelLangStore.lookup(text);
+        if (fromPack != null) {
+            return fromPack;
+        }
+        if (modelId != null && modelId.indexOf(':') > 0) {
+            // geckolib:winefox_saint -> model.geckolib.winfox_saint.name
+            String candidate = "model." + modelId.replace(':', '.') + ".name";
+            String packHit = MaidModelLangStore.lookup(candidate);
+            if (packHit != null) {
+                return packHit;
+            }
+        }
+
+        // 1) 原样能翻译就用
+        if (I18n.exists(text)) {
+            return I18n.get(text);
+        }
+        // 2) 换个命名空间再试（服务器下发的模型包常常只有模型、没有 lang）
+        String innerId = extractModelId(text);
+        if (innerId != null) {
+            // 先试常见命名空间
+            for (String ns : new String[]{"touhou_little_maid", "touhou_little_maid_spell",
+                    "foxdream", "geckolib", "minecraft"}) {
+                String hit = probeModelKey(ns, innerId);
+                if (hit != null) {
+                    return hit;
+                }
+            }
+            // 再遍历客户端当前加载的所有命名空间（覆盖任何模组 / 模型包）
+            try {
+                var minecraft = net.minecraft.client.Minecraft.getInstance();
+                if (minecraft != null && minecraft.getResourceManager() != null) {
+                    for (String ns : minecraft.getResourceManager().getNamespaces()) {
+                        String hit = probeModelKey(ns, innerId);
+                        if (hit != null) {
+                            return hit;
+                        }
+                    }
+                }
+            } catch (Throwable ignored) {
+                // 拿不到命名空间就维持上面的结果
+            }
+            String plain = "model." + innerId + ".name";
+            if (I18n.exists(plain)) {
+                return I18n.get(plain);
+            }
+        }
+        // 3) 实在没有翻译：交给调用方美化模型 ID，别把键名丢给玩家
+        return null;
+    }
+
+    /** 尝试 {@code model.<ns>.<id>.name}；存在则返回翻译后的文本。 */
+    private static String probeModelKey(String namespace, String innerId) {
+        String candidate = "model." + namespace + "." + innerId + ".name";
+        return I18n.exists(candidate) ? I18n.get(candidate) : null;
+    }
+
+    /** 看起来像不像翻译键：以 model. 开头或 .name 结尾，且没有空格。 */
+    private static boolean looksLikeTranslationKey(String text) {
+        if (text.indexOf(' ') >= 0 || text.length() > 128) {
+            return false;
+        }
+        return text.startsWith("model.") || text.endsWith(".name")
+                || (text.startsWith("entity.") || text.startsWith("item."));
+    }
+
+    /** 从 {@code model.<ns>.<id>.name} 里抽出 {@code <id>}。 */
+    private static String extractModelId(String key) {
+        String text = key;
+        if (text.startsWith("model.")) {
+            text = text.substring("model.".length());
+        }
+        if (text.endsWith(".name")) {
+            text = text.substring(0, text.length() - ".name".length());
+        }
+        int dot = text.indexOf('.');
+        if (dot > 0 && dot < text.length() - 1) {
+            text = text.substring(dot + 1);
+        }
+        return text.isBlank() ? null : text;
+    }
+
+    /** 把模型 ID 变成可读名字：winfox_saint → Winfox Saint。 */
+    private static String humanizeModelId(String modelId) {
+        if (modelId == null || modelId.isBlank()) {
+            return "?";
+        }
+        String text = modelId;
+        int colon = text.indexOf(':');
+        if (colon >= 0 && colon < text.length() - 1) {
+            text = text.substring(colon + 1);
+        }
+        String[] parts = text.split("[_\\-]+");
+        StringBuilder out = new StringBuilder();
+        for (String part : parts) {
+            if (part.isEmpty()) {
+                continue;
+            }
+            if (out.length() > 0) {
+                out.append(' ');
+            }
+            out.append(Character.toUpperCase(part.charAt(0)));
+            if (part.length() > 1) {
+                out.append(part.substring(1));
+            }
+        }
+        return out.length() == 0 ? modelId : out.toString();
     }
 
     private static String tr(String key, Object... args) {
